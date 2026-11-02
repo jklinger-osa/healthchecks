@@ -139,8 +139,8 @@ and 5xx indicates a server error.</p>
 eventually see HTTP 429 errors.</p>
 <h2 class="rule" id="list-checks">List Existing Checks</h2>
 <p><code>GET SITE_ROOT/api/v3/checks/</code></p>
-<p>Returns a list of checks belonging to the user, optionally filtered by
-one or more tags.</p>
+<p>Returns a list of checks in the project authorized by the API key, optionally
+filtered by slug, tags, and current status.</p>
 <h3>Query Parameters</h3>
 <dl>
 <dt>slug=&lt;value&gt;</dt>
@@ -159,11 +159,34 @@ specified value.</p>
 <p>Example:</p>
 <p><code>SITE_ROOT/api/v3/checks/?tag=foo&amp;tag=bar</code></p>
 </dd>
+<dt>status=&lt;values&gt;</dt>
+<dd>
+<p>Returns checks matching any of the comma-separated statuses: <code>new</code>, <code>up</code>,
+<code>grace</code>, <code>down</code>, or <code>paused</code>. Uses the same current status as the response,
+including overdue checks whose stored status has not yet been updated.
+API v1 additionally supports <code>started</code>; v2 and v3 expose <code>started</code> separately.</p>
+<p>Example: <code>SITE_ROOT/api/v3/checks/?status=down,grace</code></p>
+</dd>
+<dt>fields=&lt;names&gt;</dt>
+<dd>
+<p>Returns only the comma-separated response fields requested for each check.
+For example, <code>fields=name,status,last_ping,next_ping</code> returns those four fields.
+Without this parameter, responses contain the usual complete check objects.
+Optional fields unavailable for a check are omitted. Read-only keys retain
+their existing restrictions: field selection cannot expose UUIDs, ping URLs,
+management URLs, or channels hidden from read-only responses.</p>
+<p>Example: <code>SITE_ROOT/api/v3/checks/?status=down,grace&amp;fields=name,status,last_ping,next_ping</code></p>
+</dd>
 </dl>
+<p>The <code>status</code> and <code>fields</code> parameters work in API v1, v2, and v3 and can be combined
+with <code>tag</code> and <code>slug</code>. Whitespace and trailing commas are ignored. Empty lists,
+unknown statuses, and unknown field names return HTTP 400 with a JSON <code>error</code>.</p>
 <h3>Response Codes</h3>
 <dl>
 <dt>200 OK</dt>
 <dd>The request succeeded.</dd>
+<dt>400 Bad Request</dt>
+<dd>The <code>status</code> or <code>fields</code> parameter is empty or contains an unsupported value.</dd>
 <dt>401 Unauthorized</dt>
 <dd>The API key is either missing or invalid.</dd>
 </dl>

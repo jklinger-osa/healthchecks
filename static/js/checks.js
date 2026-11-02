@@ -305,6 +305,11 @@ $(function () {
                         statusChanged = true;
                     }
 
+                    var maintenanceSlot = $("#" + el.code + " .maintenance-indicator-slot");
+                    if (maintenanceSlot.data("html") !== el.maintenance) {
+                        maintenanceSlot.html(el.maintenance).data("html", el.maintenance);
+                    }
+
                     if (lastPing[el.code] != el.last_ping) {
                         lastPing[el.code] = el.last_ping;
                         $("#" + el.code + " .last-ping").html(el.last_ping);

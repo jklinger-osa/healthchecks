@@ -5,7 +5,10 @@
 Hello,
 <br />
 
-{% if membership %}
+{% if memberships %}
+    You have been invited to the following projects on {% site_name %}:
+    <ul>{% for member in memberships %}<li><strong>{{ member.project|mangle_link }}</strong> ({{ member.get_role_display }})</li>{% endfor %}</ul>
+{% elif membership %}
     {% if membership.project.name %}
         <strong>{{ membership.project.owner.email }}</strong> invites you to their
         <a href="{% site_root %}">{% site_name %}</a>

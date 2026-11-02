@@ -40,6 +40,7 @@ channel_urls = [
 
 # /projects/<code>/
 project_urls = [
+    path("maintenance/", views.maintenance, name="hc-maintenance"),
     path("badges/", views.badges, name="hc-badges"),
     path("checks/", views.checks, name="hc-checks"),
     path("checks/add/", views.add_check, name="hc-add-check"),

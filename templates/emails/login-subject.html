@@ -1,5 +1,7 @@
 {% load hc_extras %}
-{% if membership %}
+{% if memberships %}
+    You have been invited to join {{ memberships|length }} projects on {% site_name %}
+{% elif membership %}
     You have been invited to join {{ membership.project|safe }} on {% site_name %}
 {% else %}
     Log in to {% site_name %}

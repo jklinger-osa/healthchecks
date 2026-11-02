@@ -238,7 +238,7 @@
 
            {% if team_member_invited %}
             <div class="panel-footer">
-                {{ team_member_invited }} invited to team
+                {{ team_member_invited }} invited to team{% if team_projects_invited > 1 %} in {{ team_projects_invited }} projects{% endif %}
             </div>
             {% endif %}
 
@@ -385,17 +385,19 @@
 {% endif %}
 
 {% if is_manager %}
-<div id="invite-team-member-modal" class="modal">
+<div id="invite-team-member-modal" class="modal" {% if invite_form.errors %}data-open="true"{% endif %}>
     <div class="modal-dialog">
         <form method="post" class="form-horizontal">
             {% csrf_token %}
             <input type="hidden" name="invite_team_member" value="1" />
+            <input type="hidden" name="select_projects" value="1" />
             <div class="modal-content">
                 <div class="modal-header">
                     <button type="button" class="close" data-dismiss="modal">&times;</button>
                     <h4>Invite a Team Member</h4>
                 </div>
                 <div class="modal-body">
+                    {% if invite_form.errors %}<div class="alert alert-danger">{% for field in invite_form %}{% for error in field.errors %}<div><strong>{{ field.label }}:</strong> {{ error }}</div>{% endfor %}{% endfor %}</div>{% endif %}
                     <div class="form-group">
                         <label for="itm-email" class="col-sm-3 control-label">Email</label>
                         <div class="col-sm-8">
@@ -403,12 +405,23 @@
                                 type="email"
                                 class="form-control"
                                 id="itm-email"
+                                value="{{ invite_form.email.value|default_if_none:'' }}"
                                 name="email"
                                 maxlength="254"
                                 placeholder="friend@example.org">
                         </div>
                     </div>
 
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">Projects</label>
+                        <div class="col-sm-8">
+                            <label class="checkbox-container"><input type="checkbox" id="itm-select-all"><span class="checkmark"></span>Select all</label>
+                            <div class="well well-sm" style="max-height:200px;overflow:auto;margin-bottom:0">
+                                {% for choice in invite_form.projects %}<label class="checkbox-container">{{ choice.tag }}<span class="checkmark"></span>{{ choice.choice_label }}</label>{% endfor %}
+                            </div>
+                            <span class="help-block">Existing memberships keep their current role. Future projects need a separate invitation.</span>
+                        </div>
+                    </div>
                     <div class="form-group">
                         <label class="col-sm-3 control-label">Access Level</label>
 
@@ -418,7 +431,7 @@
                                 type="radio"
                                 name="role"
                                 value="w"
-                                checked>
+                                {% if invite_form.role.value == "w" %}checked{% endif %}>
                             <span class="radiomark"></span>
                             Team Member
                             <span class="help-block">
@@ -430,7 +443,7 @@
                             <input
                                 type="radio"
                                 name="role"
-                                value="m">
+                                value="m" {% if invite_form.role.value == "m" %}checked{% endif %}>
                             <span class="radiomark"></span>
                             Manager
                             <span class="help-block">
@@ -442,7 +455,7 @@
                             <input
                                 type="radio"
                                 name="role"
-                                value="r">
+                                value="r" {% if invite_form.role.value == "r" %}checked{% endif %}>
                             <span class="radiomark"></span>
                             Read-only
                             <span class="help-block">

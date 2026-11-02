@@ -91,8 +91,8 @@ eventually see HTTP 429 errors.
 
 `GET SITE_ROOT/api/v3/checks/`
 
-Returns a list of checks belonging to the user, optionally filtered by
-one or more tags.
+Returns a list of checks in the project authorized by the API key, optionally
+filtered by slug, tags, and current status.
 
 ### Query Parameters
 
@@ -115,10 +115,35 @@ tag=&lt;value&gt;
 
     `SITE_ROOT/api/v3/checks/?tag=foo&tag=bar`
 
+status=&lt;values&gt;
+:   Returns checks matching any of the comma-separated statuses: `new`, `up`,
+    `grace`, `down`, or `paused`. Uses the same current status as the response,
+    including overdue checks whose stored status has not yet been updated.
+    API v1 additionally supports `started`; v2 and v3 expose `started` separately.
+
+    Example: `SITE_ROOT/api/v3/checks/?status=down,grace`
+
+fields=&lt;names&gt;
+:   Returns only the comma-separated response fields requested for each check.
+    For example, `fields=name,status,last_ping,next_ping` returns those four fields.
+    Without this parameter, responses contain the usual complete check objects.
+    Optional fields unavailable for a check are omitted. Read-only keys retain
+    their existing restrictions: field selection cannot expose UUIDs, ping URLs,
+    management URLs, or channels hidden from read-only responses.
+
+    Example: `SITE_ROOT/api/v3/checks/?status=down,grace&fields=name,status,last_ping,next_ping`
+
+The `status` and `fields` parameters work in API v1, v2, and v3 and can be combined
+with `tag` and `slug`. Whitespace and trailing commas are ignored. Empty lists,
+unknown statuses, and unknown field names return HTTP 400 with a JSON `error`.
+
 ### Response Codes
 
 200 OK
 :   The request succeeded.
+
+400 Bad Request
+:   The `status` or `fields` parameter is empty or contains an unsupported value.
 
 401 Unauthorized
 :   The API key is either missing or invalid.

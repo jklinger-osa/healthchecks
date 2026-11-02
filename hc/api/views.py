@@ -38,7 +38,15 @@ from pydantic_core import PydanticCustomError
 from hc.accounts.models import Profile, Project
 from hc.api.decorators import ApiRequest, authorize, authorize_read, cors
 from hc.api.forms import FlipsFiltersForm
-from hc.api.models import Channel, Check, Flip, Notification, Ping, prepare_durations
+from hc.api.models import (
+    Channel,
+    Check,
+    CheckDict,
+    Flip,
+    Notification,
+    Ping,
+    prepare_durations,
+)
 from hc.lib.badges import check_signature, get_badge_svg, get_badge_url
 from hc.lib.signing import unsign_bounce_id
 from hc.lib.string import is_valid_uuid_string, match_keywords
@@ -429,6 +437,37 @@ def _update(check: Check, spec: Spec, v: int) -> None:
 
 @authorize_read
 def get_checks(request: ApiRequest) -> JsonResponse:
+    statuses = None
+    if "status" in request.GET:
+        statuses = {
+            value.strip() for value in request.GET["status"].split(",") if value.strip()
+        }
+        allowed_statuses = {"new", "up", "grace", "down", "paused"}
+        if request.v == 1:
+            allowed_statuses.add("started")
+        if not statuses or not statuses.issubset(allowed_statuses):
+            return JsonResponse(
+                {
+                    "error": "Invalid status. Choose from: "
+                    + ", ".join(sorted(allowed_statuses))
+                },
+                status=400,
+            )
+
+    fields = None
+    if "fields" in request.GET:
+        fields = {
+            value.strip() for value in request.GET["fields"].split(",") if value.strip()
+        }
+        if not fields or not fields.issubset(CheckDict.__annotations__):
+            return JsonResponse(
+                {
+                    "error": "Invalid fields. Choose from: "
+                    + ", ".join(sorted(CheckDict.__annotations__))
+                },
+                status=400,
+            )
+
     q = Check.objects.filter(project=request.project)
     if not request.readonly:
         # Use QuerySet.only() and Prefetch() to prefetch channel codes only:
@@ -443,11 +482,17 @@ def get_checks(request: ApiRequest) -> JsonResponse:
     if slug := request.GET.get("slug"):
         q = q.filter(slug=slug)
 
-    checks = []
+    checks: list[CheckDict | dict[str, object]] = []
     for check in q:
-        # precise, final filtering
-        if not tags or check.matches_tag_set(tags):
-            checks.append(check.to_dict(readonly=request.readonly, v=request.v))
+        if tags and not check.matches_tag_set(tags):
+            continue
+        data = check.to_dict(readonly=request.readonly, v=request.v)
+        if statuses is not None and data["status"] not in statuses:
+            continue
+        if fields is not None:
+            checks.append({key: value for key, value in data.items() if key in fields})
+        else:
+            checks.append(data)
 
     return JsonResponse({"checks": checks})
 

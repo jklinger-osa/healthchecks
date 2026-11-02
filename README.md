@@ -604,3 +604,109 @@ The Docker images:
 * Do *not* handle TLS termination. In a production setup, you will want to put
   the Healthchecks container behind a reverse proxy or load balancer that handles TLS
   termination.
+
+
+For migration from Healthchecks 4.4, see [UPGRADING-FROM-4.4.md](UPGRADING-FROM-4.4.md).
+
+## Scheduled maintenance windows (local extension)
+
+Use the project's **Maintenance** tab to assign one-time or recurring windows to
+one or more checks, or select **All services in this project** to cover current
+and future checks. A check can have several windows. Its detail page lists all
+applicable windows and opens an add dialog with that service preselected. Saving from the service
+page returns to that service; the project page provides the shared overview. Recurring windows select
+weekdays and local start/end times in an IANA time zone selected from the dropdown
+(such as `Europe/Berlin`);
+an earlier end time continues into the next day. One-time windows use explicit
+start/end dates and times. Ends are exclusive. Across a repeated DST hour, the
+window starts at the first occurrence and ends at the second; nonexistent local
+times follow the zone's UTC conversion.
+
+Monitoring and downtime history continue during maintenance. Alert transitions
+are deferred durably in the database, and down reminders exclude muted checks.
+If a check remains down after maintenance, the alert worker sends its pending
+notification without waiting for another ping or adding a fresh grace period.
+A failure and recovery entirely inside maintenance produce neither notification.
+Overlapping windows keep notifications muted while any applicable window is
+active. Editing, disabling or deleting windows re-evaluates pending notifications
+on the next worker iteration. Already delivered external incidents and repeated
+notifications owned by third-party integrations are not silenced retroactively.
+
+Run the web application and `python manage.py sendalerts` for automatic delivery.
+A superuser or project member with write access can manage windows; read-only
+members can view them. Existing checks without windows retain their behavior.
+
+
+## Multi-project invitations (local extension)
+
+In project Settings, use **Invite a Team Member** to enter an email, choose an
+access level, and select one or more projects. **Select all** selects the projects
+you own or belong to as a Manager. This scope also applies to superusers; unrelated
+projects and projects with regular or read-only membership are excluded. The
+current project is selected initially when it is eligible. A single invitation
+email lists the newly granted projects and contains one login link. Existing
+memberships keep their roles, and future projects require another explicit grant.
+
+## Compact checks API responses (local extension)
+
+`GET /api/v3/checks/?status=down,grace&fields=name,status,last_ping,next_ping`
+returns only checks currently down or in grace, with only the requested fields.
+Both parameters also work in v1 and v2, combine with existing tag/slug filters,
+and retain the normal response when omitted. Invalid values return HTTP 400;
+read-only keys never gain access to otherwise hidden fields. See the API docs
+for the supported statuses and version differences.
+
+The checks list shows a gray wrench beside integration icons when maintenance
+is configured, and an amber wrench while maintenance is active. The tooltip
+explains the state; clicking opens the service's maintenance details. The icon
+updates through the normal status refresh when a window starts, ends, or changes.
+The service details page also marks each currently active window with the same
+**Active** badge as the project maintenance overview, aligned to the right above
+the Edit button.
+
+
+## User project access in Django Admin (local extension)
+
+Open **Admin -> Users -> a user** to manage project memberships in one place.
+Each row selects a project and a role (Read-only, Member, or Manager). Add rows to
+grant access, change a role to update it explicitly, or mark rows for deletion to
+remove membership. Changes take effect only after saving the user. These direct
+admin changes do not send invitation emails.
+
+Owned projects are listed separately as read-only links. Ownership grants full
+access independently of membership, so this editor rejects redundant membership
+rows for projects the user owns. Ownership changes remain a separate operation.
+The default Healthchecks authentication backends allow admin model access to
+superusers. With a Django model-permission backend configured, the membership
+editor also follows the Member model's add/change/delete/view permissions; access
+to the user editor alone does not grant permission to change memberships.
+
+
+## Local seed projects
+
+Projects created directly through the ORM must have a unique, nonempty
+`badge_key` (use a UUID, as the normal project creation flow does). Omitting it
+breaks the Badges page because badge URLs require that key. Project creation
+through the UI sets it automatically.
+
+
+## All-project maintenance (local extension)
+
+Superusers can open **Maintenance -> Add Maintenance** from any project and select
+**All services in every project**. This scope requires a one-time window with
+start/end dates, times, and a time zone. It covers every current and future project
+and service, independent of the project used to create it, and survives deletion
+of that project. It is intended for Healthchecks service or server updates.
+
+All-project windows appear in every project's maintenance overview and in each
+service's maintenance section, with the normal Active badge and overview icon.
+Project members can view them, but only superusers can create, edit, disable,
+rescope, or delete them. Existing project/service windows continue to combine
+with them; notifications remain deferred while any applicable window is active.
+Nag reminders are suppressed too. If a service remains down after the window,
+its pending notification is sent when the alert worker is running again. Checks
+continue to record status/history; a stopped Healthchecks server cannot accept
+pings until it is back online.
+
+Apply database migrations and restart both the web process and `sendalerts` when
+deploying this extension. No additional worker or scheduler is required.

@@ -47,6 +47,7 @@ from hc.api.models import (
     Channel,
     Check,
     Flip,
+    MaintenanceWindow,
     Notification,
     Ping,
     prepare_durations,
@@ -55,9 +56,9 @@ from hc.front import forms
 from hc.front.templatetags.hc_extras import (
     down_title,
     num_down_title,
+    obfuscated_support_email,
     site_hostname,
     sortchecks,
-    obfuscated_support_email,
 )
 from hc.front.validators import CronValidator, OnCalendarValidator
 from hc.lib.badges import get_badge_url
@@ -70,6 +71,7 @@ logger = logging.getLogger(__name__)
 VALID_SORT_VALUES = ("name", "-name", "last_ping", "-last_ping", "created")
 STATUS_TEXT_TMPL = get_template("front/log_status_text.html")
 LAST_PING_TMPL = get_template("front/last_ping_cell.html")
+MAINTENANCE_INDICATOR_TMPL = get_template("front/maintenance_indicator.html")
 EVENTS_TMPL = get_template("front/details_events.html")
 DOWNTIMES_TMPL = get_template("front/details_downtimes.html")
 
@@ -238,7 +240,12 @@ def checks(request: AuthenticatedHttpRequest, code: UUID) -> HttpResponse:
 
     q = Check.objects.filter(project=project)
     q = q.select_related("project")
-    checks = list(q.prefetch_related("channel_set"))
+    checks = list(
+        q.prefetch_related(
+            "channel_set", "maintenance_windows", "project__maintenancewindow_set"
+        )
+    )
+    MaintenanceWindow.preload_global(checks)
     sortchecks(checks, request.profile.sort)
 
     tags_counts, num_down = _tags_counts(checks)
@@ -319,8 +326,13 @@ def status(request: HttpRequest, code: UUID) -> HttpResponse:
         return HttpResponseForbidden()
 
     project, _rw = _get_project_for_user(request, code)
-    checks = list(Check.objects.filter(project=project))
+    checks = list(
+        Check.objects.filter(project=project)
+        .select_related("project")
+        .prefetch_related("maintenance_windows", "project__maintenancewindow_set")
+    )
 
+    MaintenanceWindow.preload_global(checks)
     details = []
     for check in checks:
         ctx = {"check": check}
@@ -329,6 +341,7 @@ def status(request: HttpRequest, code: UUID) -> HttpResponse:
                 "code": str(check.code),
                 "status": check.get_status(),
                 "last_ping": LAST_PING_TMPL.render(ctx).strip(),
+                "maintenance": MAINTENANCE_INDICATOR_TMPL.render(ctx).strip(),
                 "started": check.last_start is not None,
             }
         )
@@ -1003,6 +1016,7 @@ def _tz_switches(profile: Profile, check: Check) -> list[str]:
 def details(request: AuthenticatedHttpRequest, code: UUID) -> HttpResponse:
     _refresh_last_active_date(request)
     check, rw = _get_check_for_user(request, code, preload_owner_profile=True)
+    MaintenanceWindow.preload_global([check])
 
     if request.GET.get("urls") in ("uuid", "slug") and rw:
         check.project.show_slugs = request.GET["urls"] == "slug"
@@ -1023,6 +1037,7 @@ def details(request: AuthenticatedHttpRequest, code: UUID) -> HttpResponse:
 
     ctx = {
         "page": "details",
+        "messages": messages.get_messages(request),
         "project": check.project,
         "check": check,
         "rw": rw,
@@ -1436,3 +1451,107 @@ def contact_vcf(request: HttpRequest) -> HttpResponse:
 
 
 # Forks: add custom views after this line
+
+
+@login_required
+def maintenance(request: AuthenticatedHttpRequest, code: UUID) -> HttpResponse:
+    project, rw = _get_project_for_user(request, code)
+    modal_request = (
+        request.GET.get("modal") == "1"
+        or request.headers.get("X-Requested-With") == "XMLHttpRequest"
+    )
+    return_check = None
+    return_code = (
+        request.POST.get("return_check")
+        if request.method == "POST"
+        else request.GET.get("return_check")
+    )
+    if return_code:
+        if not is_valid_uuid_string(return_code):
+            raise Http404
+        return_check = get_object_or_404(Check, project=project, code=return_code)
+    destination = (
+        reverse("hc-details", args=[return_check.code])
+        if return_check
+        else reverse("hc-maintenance", args=[project.code])
+    )
+    window_code = (
+        request.POST.get("window")
+        if request.method == "POST"
+        else request.GET.get("edit")
+    )
+    window = MaintenanceWindow(project=project)
+    if window_code:
+        if not is_valid_uuid_string(window_code):
+            raise Http404
+        window = get_object_or_404(
+            MaintenanceWindow.objects.filter(Q(project=project) | Q(project=None)),
+            code=window_code,
+        )
+        if window.all_projects and not request.user.is_superuser:
+            raise PermissionDenied
+    was_global = bool(window.pk and window.all_projects)
+    if (request.method == "POST" or modal_request) and not rw:
+        raise PermissionDenied
+    if request.method == "POST" and request.POST.get("action") == "delete":
+        if not window.pk:
+            return HttpResponseBadRequest()
+        window.delete()
+        pending = Flip.objects.filter(processed=None, deferred_until__isnull=False)
+        if not was_global:
+            pending = pending.filter(owner__project=project)
+        pending.update(deferred_until=now())
+        messages.success(request, "Maintenance window deleted.")
+        return redirect(destination)
+    initial = (
+        {}
+        if window.pk
+        else {"kind": "weekly", "tz": request.profile.tz, "weekdays": list(range(7))}
+    )
+    if not window.pk and request.GET.get("check"):
+        check_code = request.GET["check"]
+        if not is_valid_uuid_string(check_code):
+            raise Http404
+        selected_check = get_object_or_404(Check, project=project, code=check_code)
+        initial["checks"] = [selected_check.pk]
+    form = forms.MaintenanceWindowForm(
+        request.POST if request.method == "POST" else None,
+        instance=window,
+        project=project,
+        allow_global=request.user.is_superuser,
+        initial=initial,
+    )
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        pending = Flip.objects.filter(processed=None, deferred_until__isnull=False)
+        if not (was_global or window.all_projects):
+            pending = pending.filter(owner__project=project)
+        pending.update(deferred_until=now())
+        messages.success(request, "Maintenance window saved.")
+        if modal_request:
+            return JsonResponse({"redirect": destination})
+        return redirect(destination)
+    context = {
+        "messages": messages.get_messages(request),
+        "return_check": return_check,
+        "current_time": now(),
+        "show_modal": bool(
+            form.is_bound or request.GET.get("edit") or request.GET.get("check")
+        ),
+        "project": project,
+        "rw": rw,
+        "page": "maintenance",
+        "form": form,
+        "window": window,
+        "windows": MaintenanceWindow.objects.filter(
+            Q(project=project) | Q(project=None)
+        )
+        .prefetch_related("checks")
+        .order_by("name", "id"),
+    }
+    return render(
+        request,
+        "front/maintenance_modal.html" if modal_request else "front/maintenance.html",
+        context,
+        status=400 if form.is_bound else 200,
+    )

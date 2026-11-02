@@ -191,3 +191,117 @@ class ListChecksTestCase(BaseTestCase):
         self.assertEqual(len(doc["checks"]), 1)
         check = doc["checks"][0]
         self.assertEqual(check["name"], "Alice 1")
+
+    def test_status_filter_uses_computed_status(self) -> None:
+        self.a2.last_ping = self.now - self.a2.timeout - self.a2.grace - td(seconds=1)
+        self.a2.save()
+        for version in (1, 2, 3):
+            with self.subTest(version=version):
+                response = self.client.get(
+                    f"/api/v{version}/checks/?status=down", HTTP_X_API_KEY="X" * 32
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(
+                    [check["name"] for check in response.json()["checks"]], ["Alice 2"]
+                )
+                self.assertEqual(response.json()["checks"][0]["status"], "down")
+
+    def test_status_filter_accepts_multiple_statuses_and_other_filters(self) -> None:
+        self.a2.last_ping = self.now - self.a2.timeout - td(seconds=1)
+        self.a2.save()
+        response = self.client.get(
+            "/api/v3/checks/?status=new,grace&tag=a2-tag&fields=name,status&slug=",
+            HTTP_X_API_KEY="X" * 32,
+        )
+        self.assertEqual(
+            response.json(), {"checks": [{"name": "Alice 2", "status": "grace"}]}
+        )
+        response = self.client.get(
+            "/api/v3/checks/?status=grace&slug=alice-1", HTTP_X_API_KEY="X" * 32
+        )
+        self.assertEqual(response.json(), {"checks": []})
+
+    def test_status_filter_respects_versioned_started_status(self) -> None:
+        self.a1.last_start = now()
+        self.a1.save()
+        response = self.client.get(
+            "/api/v1/checks/?status=started&fields=name,status", HTTP_X_API_KEY="X" * 32
+        )
+        self.assertEqual(
+            response.json(), {"checks": [{"name": "Alice 1", "status": "started"}]}
+        )
+        response = self.client.get(
+            "/api/v2/checks/?status=new&fields=name,status", HTTP_X_API_KEY="X" * 32
+        )
+        self.assertEqual(
+            response.json(), {"checks": [{"name": "Alice 1", "status": "new"}]}
+        )
+        response = self.client.get(
+            "/api/v2/checks/?status=started", HTTP_X_API_KEY="X" * 32
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_field_selection_preserves_values_and_query_count(self) -> None:
+        for version in (1, 2, 3):
+            with self.subTest(version=version):
+                full = self.get(v=version).json()["checks"]
+                with self.assertNumQueries(3):
+                    response = self.client.get(
+                        f"/api/v{version}/checks/?fields=name,status,last_ping,next_ping,",
+                        HTTP_X_API_KEY="X" * 32,
+                    )
+                expected = [
+                    {
+                        key: check[key]
+                        for key in ("name", "status", "last_ping", "next_ping")
+                    }
+                    for check in full
+                ]
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json(), {"checks": expected})
+
+    def test_field_selection_cannot_expose_readonly_secrets(self) -> None:
+        self.project.api_key_readonly = "R" * 32
+        self.project.save()
+        response = self.client.get(
+            "/api/v3/checks/?fields=name,unique_key,uuid,ping_url,update_url,pause_url,resume_url,channels",
+            HTTP_X_API_KEY="R" * 32,
+        )
+        self.assertEqual(response.status_code, 200)
+        for check in response.json()["checks"]:
+            self.assertEqual(set(check), {"name", "unique_key"})
+        self.assertNotContains(response, str(self.a1.code))
+        self.assertNotContains(response, str(self.c1.code))
+
+    def test_field_selection_omits_unavailable_optional_fields(self) -> None:
+        response = self.client.get(
+            "/api/v3/checks/?fields=name,schedule,tz,last_duration",
+            HTTP_X_API_KEY="X" * 32,
+        )
+        self.assertEqual(
+            response.json(), {"checks": [{"name": "Alice 1"}, {"name": "Alice 2"}]}
+        )
+
+    def test_it_rejects_invalid_status_and_fields(self) -> None:
+        for query in (
+            "status=",
+            "status=,",
+            "status=down,unknown",
+            "fields=",
+            "fields=,",
+            "fields=name,api_key",
+            "fields=project",
+        ):
+            with self.subTest(query=query):
+                response = self.client.get(
+                    f"/api/v3/checks/?{query}", HTTP_X_API_KEY="X" * 32
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("error", response.json())
+
+    def test_filtered_checks_stay_within_the_authorized_project(self) -> None:
+        Check.objects.create(project=self.bobs_project, name="Secret", status="down")
+        response = self.client.get(
+            "/api/v3/checks/?status=down&fields=name", HTTP_X_API_KEY="X" * 32
+        )
+        self.assertEqual(response.json(), {"checks": []})

@@ -11,6 +11,22 @@ $(function () {
         return false;
     });
 
+    const projectChoices = $("#invite-team-member-modal [name=projects]");
+    function updateProjectSelection() {
+        const count = projectChoices.filter(":checked").length;
+        $("#itm-select-all").prop("checked", count === projectChoices.length)
+            .prop("indeterminate", count > 0 && count < projectChoices.length);
+    }
+    $("#itm-select-all").on("change", function () {
+        projectChoices.prop("checked", this.checked);
+        updateProjectSelection();
+    });
+    projectChoices.on("change", updateProjectSelection);
+    updateProjectSelection();
+    if ($("#invite-team-member-modal").data("open")) {
+        $("#invite-team-member-modal").modal("show");
+    }
+
     $("#invite-team-member-modal").on("shown.bs.modal", function () {
         $("#itm-email").focus();
     });

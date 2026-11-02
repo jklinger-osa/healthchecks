@@ -135,6 +135,9 @@
                     <a href="{% url 'hc-badges' project.code %}">Badges</a>
                 </li>
 
+                <li {% if page == 'maintenance' %} class="active" {% endif %}>
+                    <a href="{% url 'hc-maintenance' project.code %}">Maintenance</a>
+                </li>
                 <li {% if page == 'project' %} class="active" {% endif %}>
                     <a href="{% url 'hc-project-settings' project.code %}">Settings</a>
                 </li>

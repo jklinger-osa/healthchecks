@@ -9,7 +9,7 @@ from django.contrib.auth.models import User
 from django.http import HttpRequest
 from pyotp.totp import TOTP
 
-from hc.accounts.models import REPORT_CHOICES, Member
+from hc.accounts.models import REPORT_CHOICES, Member, Project
 from hc.api.models import TokenBucket
 from hc.front.validators import TimezoneValidator
 from hc.lib.tz import all_timezones
@@ -144,6 +144,11 @@ class ChangeEmailForm(forms.Form):
 class InviteTeamMemberForm(forms.Form):
     email = LowercaseEmailField(max_length=254)
     role = forms.ChoiceField(choices=Member.Role.choices)
+    projects = forms.ModelMultipleChoiceField(
+        queryset=Project.objects.none(),
+        to_field_name="code",
+        widget=forms.CheckboxSelectMultiple,
+    )
 
 
 class RemoveTeamMemberForm(forms.Form):

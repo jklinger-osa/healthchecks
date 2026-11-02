@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import time
 from datetime import timedelta as td
+from typing import cast
 from urllib.parse import urlparse
 from uuid import UUID, uuid4
 
@@ -17,7 +18,9 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
 from django.db import transaction
+from django.db.models import Q
 from django.db.models.functions import Lower
+from django.forms import ModelMultipleChoiceField
 from django.http import (
     HttpRequest,
     HttpResponse,
@@ -371,7 +374,25 @@ def project(request: AuthenticatedHttpRequest, code: UUID) -> HttpResponse:
         is_manager = membership.role == Member.Role.MANAGER
         rw = membership.is_rw
 
+    manageable_projects = Project.objects.none()
+    invite_form = forms.InviteTeamMemberForm(
+        initial={"projects": [project.code], "role": "w"}
+    )
+    if is_manager:
+        manageable_projects = Project.objects.filter(
+            Q(owner=request.user)
+            | Q(member__user=request.user, member__role=Member.Role.MANAGER)
+        ).distinct()
+        manageable_projects = manageable_projects.select_related("owner").order_by(
+            Lower("name"), "id"
+        )
+        cast(
+            ModelMultipleChoiceField[Project],
+            invite_form.fields["projects"],
+        ).queryset = manageable_projects
+
     ctx = {
+        "invite_form": invite_form,
         "page": "project",
         "rw": rw,
         "project": project,
@@ -414,23 +435,55 @@ def project(request: AuthenticatedHttpRequest, code: UUID) -> HttpResponse:
             if not is_manager:
                 return HttpResponseForbidden()
 
-            invite_form = forms.InviteTeamMemberForm(request.POST)
+            data = request.POST.copy()
+            if "select_projects" not in data and "projects" not in data:
+                data["projects"] = str(project.code)
+            invite_form = forms.InviteTeamMemberForm(data)
+            cast(
+                ModelMultipleChoiceField[Project],
+                invite_form.fields["projects"],
+            ).queryset = manageable_projects
+            ctx["invite_form"] = invite_form
             if invite_form.is_valid():
                 email = invite_form.cleaned_data["email"]
+                projects = list(invite_form.cleaned_data["projects"])
+                known_member = Member.objects.filter(
+                    project__in=manageable_projects, user__email=email
+                ).exists()
+                if not known_member and not TokenBucket.authorize_invite(request.user):
+                    return render(request, "try_later.html")
 
-                invite_suggestions = project.invite_suggestions()
-                if not invite_suggestions.filter(email=email).exists():
-                    # And are we not hitting a rate limit?
-                    if not TokenBucket.authorize_invite(request.user):
-                        return render(request, "try_later.html")
+                invited = []
+                with transaction.atomic():
+                    try:
+                        user = User.objects.get(email=email)
+                    except User.DoesNotExist:
+                        user = _make_user(email, with_project=False)
 
-                try:
-                    user = User.objects.get(email=email)
-                except User.DoesNotExist:
-                    user = _make_user(email, with_project=False)
+                    for selected_project in projects:
+                        if selected_project.invite(
+                            user,
+                            role=invite_form.cleaned_data["role"],
+                            send_email=False,
+                        ):
+                            invited.append(selected_project)
 
-                if project.invite(user, role=invite_form.cleaned_data["role"]):
+                if invited:
+                    if settings.MAILERS:
+                        memberships = list(
+                            Member.objects.filter(project__in=invited, user=user)
+                            .select_related("project__owner")
+                            .order_by("project__name", "project_id")
+                        )
+                        Profile.objects.for_user(user).send_instant_login_link(
+                            membership=memberships[0],
+                            memberships=memberships if len(memberships) > 1 else None,
+                            redirect_url=reverse(
+                                "hc-checks", args=[memberships[0].project.code]
+                            ),
+                        )
                     ctx["team_member_invited"] = email
+                    ctx["team_projects_invited"] = len(invited)
                     ctx["team_status"] = "success"
                 else:
                     ctx["team_member_duplicate"] = email
