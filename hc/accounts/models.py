@@ -142,7 +142,10 @@ class Profile(models.Model):
         return check_password(token, self.token)
 
     def send_instant_login_link(
-        self, membership: Member | None = None, redirect_url: str | None = None
+        self,
+        membership: Member | None = None,
+        redirect_url: str | None = None,
+        memberships: list[Member] | None = None,
     ) -> None:
         token = self.prepare_token()
         query = {"next": redirect_url} if redirect_url else None
@@ -154,6 +157,7 @@ class Profile(models.Model):
             "button_text": "Log In",
             "button_url": url,
             "membership": membership,
+            "memberships": memberships,
         }
         emails.login(self.user.email, ctx)
 
@@ -212,6 +216,8 @@ class Profile(models.Model):
         return Check.objects.filter(project__in=self.project_ids())
 
     def send_report(self, nag: bool = False) -> bool:
+        from hc.api.models import MaintenanceWindow
+
         q = self.checks_from_all_projects()
 
         # Has there been a ping in last 6 months?
@@ -229,7 +235,14 @@ class Profile(models.Model):
         # after grouping.
         q = q.select_related("project").order_by("project__name", "project_id")
         # list() executes the query, to avoid DB access while rendering the template.
-        checks = list(q)
+        checks = list(
+            q.prefetch_related("maintenance_windows", "project__maintenancewindow_set")
+            if nag
+            else q
+        )
+
+        if nag:
+            MaintenanceWindow.preload_global(checks)
 
         unsub_url = self.reports_unsub_url()
         headers = {
@@ -286,7 +299,11 @@ class Profile(models.Model):
 
         if nag:
             # For nags, only show checks that are currently down
-            checks = [c for c in checks if c.get_status() == "down"]
+            checks = [
+                c
+                for c in checks
+                if c.get_status() == "down" and c.maintenance_until() is None
+            ]
             if not checks:
                 return False
             ctx["checks"] = checks
@@ -476,7 +493,7 @@ class Project(models.Model):
         q = q.exclude(memberships__project=self)
         return q.distinct().order_by("email")
 
-    def invite(self, user: User, role: str) -> bool:
+    def invite(self, user: User, role: str, *, send_email: bool = True) -> bool:
         if Member.objects.filter(user=user, project=self).exists():
             return False
 
@@ -486,7 +503,7 @@ class Project(models.Model):
         m = Member.objects.create(user=user, project=self, role=role)
         checks_url = reverse("hc-checks", args=[self.code])
 
-        if settings.MAILERS:
+        if send_email and settings.MAILERS:
             profile = Profile.objects.for_user(user)
             profile.send_instant_login_link(membership=m, redirect_url=checks_url)
         return True

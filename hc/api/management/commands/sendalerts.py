@@ -13,6 +13,7 @@ from typing import Any
 from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.db import close_old_connections, connection
+from django.db.models import Q
 from django.utils.timezone import now
 
 from hc.api.models import Check, Flip
@@ -29,8 +30,12 @@ def notify(flip: Flip) -> str | None:
     if not connection.in_atomic_block:
         close_old_connections()
 
-    # Set or clear dates for followup nags
     check = flip.owner
+    if until := check.maintenance_until():
+        Flip.objects.filter(id=flip.id).update(processed=None, deferred_until=until)
+        return None
+
+    # Set or clear dates for followup nags
     check.project.update_next_nag_dates()
     channels = flip.select_channels()
     if not channels:
@@ -102,14 +107,37 @@ class Command(BaseCommand):
         if not self.seats.acquire(timeout=1):
             return False  # Workers busy, main thread should wait a bit
 
-        flip = Flip.objects.filter(processed=None).first()
+        due = Q(deferred_until=None) | Q(deferred_until__lte=now())
+        flip = Flip.objects.filter(due, processed=None).select_related("owner").first()
         if flip is None:
             self.seats.release()
             return False  # No work found, main thread should wait a bit
 
+        if until := flip.owner.maintenance_until():
+            Flip.objects.filter(id=flip.id, processed=None).update(deferred_until=until)
+            self.seats.release()
+            return True
+
+        if flip.deferred_until is not None:
+            obsolete = flip.owner.flip_set.filter(id__gt=flip.id).exists()
+            obsolete = obsolete or flip.owner.get_status() != flip.new_status
+            if flip.new_status == "up":
+                previous_down = (
+                    flip.owner.flip_set.filter(id__lt=flip.id, new_status="down")
+                    .order_by("-id")
+                    .first()
+                )
+                obsolete = obsolete or bool(
+                    previous_down and previous_down.deferred_until is not None
+                )
+            if obsolete:
+                Flip.objects.filter(id=flip.id, processed=None).update(processed=now())
+                self.seats.release()
+                return True
+
         # Mark the flip as processed:
         q = Flip.objects.filter(id=flip.id, processed=None)
-        num_updated = q.update(processed=now())
+        num_updated = q.update(processed=now(), deferred_until=None)
         if num_updated != 1:
             self.seats.release()
             # Nothing got updated: another sendalerts process got there first.

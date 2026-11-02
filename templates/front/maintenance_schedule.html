@@ -1,0 +1,10 @@
+{% load tz %}
+{% timezone window.tz %}
+{% if window.kind == 'one_time' %}
+    {{ window.starts_at|date:"M j, Y H:i" }} &ndash; {{ window.ends_at|date:"M j, Y H:i" }}
+{% else %}
+    {{ window.start_time|time:"H:i" }} &ndash; {{ window.end_time|time:"H:i" }}
+    <div class="text-muted"><small>{{ window.weekdays_label }}</small></div>
+{% endif %}
+<div class="text-muted"><small>{{ window.tz }}</small></div>
+{% endtimezone %}

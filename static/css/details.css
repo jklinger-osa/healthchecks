@@ -161,3 +161,20 @@ ul.crosses li:before {
     margin-left: 50px;
     padding-top: 6px;
 }
+#service-maintenance .maintenance-window {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 15px;
+}
+
+#service-maintenance .maintenance-actions {
+    flex-shrink: 0;
+    text-align: right;
+}
+
+#service-maintenance .maintenance-actions .btn {
+    display: block;
+    margin-top: 6px;
+    margin-left: auto;
+}

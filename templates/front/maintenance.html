@@ -1,0 +1,44 @@
+{% extends "base_project.html" %}
+{% load compress static %}
+{% block title %}Maintenance - {{ site_name }}{% endblock %}
+{% block content %}
+<div class="row">
+    <div class="col-sm-12">
+        {% for message in messages %}<p class="alert alert-{{ message.tags }}">{{ message }}</p>{% endfor %}
+        {% if rw %}<button type="button" class="btn btn-primary pull-right" data-maintenance-url="{% url 'hc-maintenance' project.code %}?modal=1">Add Maintenance&hellip;</button>{% endif %}
+        <h1>Maintenance</h1>
+        <p class="text-muted">Schedule quiet periods for your services. Monitoring continues, and ongoing failures alert when maintenance ends.</p>
+        <div class="table-responsive">
+        <table class="table channels-table">
+            <thead><tr><th>Name</th><th>Schedule</th><th>Services</th><th>Status</th>{% if rw %}<th></th>{% endif %}</tr></thead>
+            <tbody>
+            {% for item in windows %}
+                <tr>
+                    <td><strong>{{ item.name }}</strong><div class="text-muted"><small>{{ item.get_kind_display }}</small></div></td>
+                    <td>{% include "front/maintenance_schedule.html" with window=item %}</td>
+                    <td>{% if item.all_projects %}<span class="label label-default">All projects</span><div class="text-muted"><small>Every service in this Healthchecks instance</small></div>{% elif item.all_checks %}All services<div class="text-muted"><small>Current and future services in this project</small></div>{% else %}{% for service in item.checks.all %}<a href="{% url 'hc-details' service.code %}">{{ service.name_then_code }}</a>{% if not forloop.last %}<br>{% endif %}{% empty %}<span class="text-muted">No services</span>{% endfor %}{% endif %}</td>
+                    <td>{% if not item.enabled %}<span class="label label-default">Disabled</span>{% elif item.active_until %}<span class="label label-warning">Active</span>{% elif item.kind == 'one_time' and item.ends_at <= current_time %}<span class="text-muted">Ended</span>{% else %}Scheduled{% endif %}</td>
+                    {% if rw %}<td class="text-right">{% if item.project_id or request.user.is_superuser %}
+                        <button type="button" class="btn btn-sm btn-default" data-maintenance-url="{% url 'hc-maintenance' project.code %}?modal=1&amp;edit={{ item.code }}">Edit&hellip;</button>
+                        <button type="button" class="btn btn-sm btn-default" data-maintenance-delete="{{ item.code }}" data-maintenance-name="{{ item.name }}">Remove&hellip;</button>
+                    {% endif %}</td>{% endif %}
+                </tr>
+            {% empty %}<tr><td colspan="5"><p>No maintenance windows yet.</p><p class="text-muted">Add a one-time or recurring window for one service, several services, the whole project, or (for superusers) all projects.</p></td></tr>{% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+</div>
+<div id="maintenance-modal" class="modal" {% if show_modal %}data-open="true"{% endif %}>{% if show_modal and rw %}{% include "front/maintenance_modal.html" %}{% endif %}</div>
+{% if rw %}
+<div id="maintenance-delete-modal" class="modal">
+    <div class="modal-dialog"><form action="{% url 'hc-maintenance' project.code %}" method="post"><div class="modal-content">
+        {% csrf_token %}<input type="hidden" name="action" value="delete"><input type="hidden" name="window">
+        <div class="modal-header"><button type="button" class="close" data-dismiss="modal">&times;</button><h4>Remove Maintenance Window</h4></div>
+        <div class="modal-body"><p>Remove <strong class="maintenance-delete-name"></strong>?</p><p>Notifications suppressed by this window will be re-evaluated immediately.</p></div>
+        <div class="modal-footer"><button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button><button type="submit" class="btn btn-danger">Remove Window</button></div>
+    </div></form></div>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}{% compress js %}<script src="{% static 'js/maintenance.js' %}"></script>{% endcompress %}{% endblock %}

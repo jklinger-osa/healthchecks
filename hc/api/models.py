@@ -7,7 +7,7 @@ import socket
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from datetime import timedelta as td
 from importlib import import_module
 from typing import Any, NotRequired, TypedDict
@@ -17,6 +17,7 @@ from cronsim import CronSim
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.contrib.humanize.templatetags.humanize import naturaltime
+from django.core.exceptions import ValidationError
 from django.core.mail import mail_admins
 from django.core.signing import TimestampSigner
 from django.db import IntegrityError, models, transaction
@@ -379,6 +380,37 @@ class Check(models.Model):
 
         return "up"
 
+    _global_maintenance_windows: list[MaintenanceWindow] | None = None
+
+    def maintenance_schedules(self) -> list[MaintenanceWindow]:
+        windows = {window.pk: window for window in self.maintenance_windows.all()}
+        windows.update(
+            (window.pk, window)
+            for window in self.project.maintenancewindow_set.all()
+            if window.all_checks
+        )
+        global_windows = self._global_maintenance_windows
+        if global_windows is None:
+            global_windows = list(MaintenanceWindow.objects.filter(project=None))
+        windows.update((window.pk, window) for window in global_windows)
+        return sorted(
+            (
+                window
+                for window in windows.values()
+                if window.project_id in (None, self.project_id)
+            ),
+            key=lambda window: (window.name.lower(), window.pk),
+        )
+
+    def maintenance_until(self, moment: datetime | None = None) -> datetime | None:
+        moment = moment or now()
+        ends = [
+            end
+            for window in self.maintenance_schedules()
+            if (end := window.active_until(moment)) is not None
+        ]
+        return max(ends, default=None)
+
     def rename_and_delete(self) -> None:
         """Change check's code and slug, then delete the check.
 
@@ -670,6 +702,115 @@ class Check(models.Model):
         flip.new_status = new_status
         flip.reason = reason
         flip.save()
+
+
+class MaintenanceWindow(models.Model):
+    code = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    project = models.ForeignKey(Project, models.CASCADE, null=True, blank=True)
+    name = models.CharField(max_length=100)
+    checks = models.ManyToManyField(
+        Check, related_name="maintenance_windows", blank=True
+    )
+    all_checks = models.BooleanField(default=False)
+    enabled = models.BooleanField(default=True)
+    kind = models.CharField(
+        max_length=10, choices=(("one_time", "One-time"), ("weekly", "Recurring"))
+    )
+    tz = models.CharField(max_length=36, default="UTC")
+    starts_at = models.DateTimeField(null=True, blank=True)
+    ends_at = models.DateTimeField(null=True, blank=True)
+    start_time = models.TimeField(null=True, blank=True)
+    end_time = models.TimeField(null=True, blank=True)
+    weekdays = models.JSONField(default=list, blank=True)
+
+    class Meta:
+        constraints = (
+            models.CheckConstraint(
+                condition=models.Q(project__isnull=False) | models.Q(kind="one_time"),
+                name="maintenance_global_one_time",
+            ),
+        )
+
+    @property
+    def all_projects(self) -> bool:
+        return self.project_id is None
+
+    @staticmethod
+    def preload_global(checks: Sequence[Check]) -> None:
+        if not checks:
+            return
+        windows = list(MaintenanceWindow.objects.filter(project=None))
+        for check in checks:
+            check._global_maintenance_windows = windows
+
+    def __str__(self) -> str:
+        return self.name
+
+    def clean(self) -> None:
+        if self.all_projects and self.kind != "one_time":
+            raise ValidationError({"kind": "All-project maintenance must be one-time."})
+        try:
+            ZoneInfo(self.tz)
+        except (KeyError, ValueError):
+            raise ValidationError({"tz": "Select a valid time zone."})
+        if self.kind == "one_time":
+            if not self.starts_at or not self.ends_at or self.ends_at <= self.starts_at:
+                raise ValidationError("A one-time window must end after it starts.")
+        elif self.kind == "weekly":
+            if (
+                not self.start_time
+                or not self.end_time
+                or self.start_time == self.end_time
+            ):
+                raise ValidationError(
+                    "Recurring windows need different start and end times."
+                )
+            if not self.weekdays or any(
+                type(day) is not int or day not in range(7) for day in self.weekdays
+            ):
+                raise ValidationError(
+                    {"weekdays": "Select at least one valid weekday."}
+                )
+
+    def active_until(self, moment: datetime | None = None) -> datetime | None:
+        moment = moment or now()
+        if not self.enabled:
+            return None
+        moment = moment.astimezone(UTC)
+        if self.kind == "one_time":
+            if (
+                self.starts_at
+                and self.ends_at
+                and self.starts_at <= moment < self.ends_at
+            ):
+                return self.ends_at
+            return None
+        if not self.start_time or not self.end_time:
+            return None
+        zone = ZoneInfo(self.tz)
+        local_day = moment.astimezone(zone).date()
+        for offset in (0, 1):
+            start_day = local_day - td(days=offset)
+            if start_day.weekday() not in self.weekdays:
+                continue
+            end_day = start_day + td(days=self.end_time <= self.start_time)
+            start = (
+                datetime.combine(start_day, self.start_time, zone)
+                .replace(fold=0)
+                .astimezone(UTC)
+            )
+            end = (
+                datetime.combine(end_day, self.end_time, zone)
+                .replace(fold=1)
+                .astimezone(UTC)
+            )
+            if start <= moment < end:
+                return end
+        return None
+
+    def weekdays_label(self) -> str:
+        names = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+        return ", ".join(names[day] for day in sorted(set(self.weekdays)))
 
 
 class PingDict(TypedDict):
@@ -1359,6 +1500,7 @@ class FlipDict(TypedDict):
 
 
 class Flip(models.Model):
+    deferred_until = models.DateTimeField(null=True, blank=True, db_index=True)
     owner = models.ForeignKey(Check, models.CASCADE)
     created = models.DateTimeField()
     processed = models.DateTimeField(null=True, blank=True)

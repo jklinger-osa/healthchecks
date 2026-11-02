@@ -161,3 +161,23 @@ body.dark #checks-table .integrations span.off {
 #url-style-switcher a.active {
     text-decoration:  underline;
 }
+
+#checks-table .integrations {
+    display: inline-block;
+    vertical-align: middle;
+}
+
+#checks-table .maintenance-indicator {
+    display: inline-block;
+    vertical-align: middle;
+    color: var(--text-muted);
+    padding: 6px 3px;
+}
+
+#checks-table .maintenance-active {
+    color: #b66b00;
+}
+
+body.dark #checks-table .maintenance-active {
+    color: #ffbe55;
+}

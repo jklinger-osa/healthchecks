@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from datetime import date, datetime
-from typing import ClassVar, TypedDict
+from typing import ClassVar, TypedDict, cast
 
+from django import forms
 from django.contrib import admin
 from django.contrib.admin import ModelAdmin
 from django.contrib.auth import login as auth_login
@@ -14,10 +15,10 @@ from django.http import HttpRequest, HttpResponseRedirect
 from django.shortcuts import redirect
 from django.template.loader import render_to_string
 from django.urls import reverse
-from django.utils.html import format_html
+from django.utils.html import format_html, format_html_join
 from django_stubs_ext import WithAnnotations
 
-from hc.accounts.models import Credential, Profile, Project
+from hc.accounts.models import Credential, Member, Profile, Project
 from hc.api.models import Check
 
 Lookups = Iterable[tuple[str, str]]
@@ -298,11 +299,65 @@ class UserAnnotations(TypedDict):
     last_active_date: datetime | None
 
 
+class MembershipInlineForm(forms.ModelForm[Member]):
+    class Meta:
+        model = Member
+        fields = ("project", "role")
+
+    def clean_project(self) -> Project:
+        project = cast(Project, self.cleaned_data["project"])
+        if project.owner_id == self.instance.user_id:
+            raise forms.ValidationError(
+                "This user owns this project and already has full access. Manage ownership separately."
+            )
+        return project
+
+
+class MembershipInline(admin.TabularInline[Member, User]):
+    model = Member
+    form = MembershipInlineForm
+    fields = ("project", "role")
+    autocomplete_fields = ("project",)
+    verbose_name = "project membership"
+    verbose_name_plural = "project memberships"
+    extra = 0
+
+
 admin.site.unregister(User)
 
 
 @admin.register(User)
 class HcUserAdmin(UserAdmin[User]):
+    inlines = (MembershipInline,)
+    readonly_fields = ("owned_projects",)
+    fieldsets = (
+        *(UserAdmin.fieldsets or ()),
+        (
+            "Project ownership",
+            {
+                "fields": ("owned_projects",),
+                "description": "Ownership grants full access independently of the memberships below. Removing a membership does not remove owner access.",
+            },
+        ),
+    )
+
+    @admin.display(description="Owned projects")
+    def owned_projects(self, user: User) -> str:
+        projects = user.project_set.order_by("name", "id")
+        if not projects:
+            return "This user does not own any projects."
+        return format_html_join(
+            "",
+            '<div><a href="{}">{}</a></div>',
+            (
+                (
+                    reverse("admin:accounts_project_change", args=[project.pk]),
+                    project.name or f"Default Project for {user.email}",
+                )
+                for project in projects
+            ),
+        )
+
     list_display = (
         "id",
         "email",

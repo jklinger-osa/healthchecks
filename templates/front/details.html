@@ -1,5 +1,5 @@
 {% extends "base_project.html" %}
-{% load compress humanize static hc_extras %}
+{% load compress humanize static hc_extras tz %}
 
 {% block title %}{{ check|down_title }}{% endblock %}
 {% block favicon %}
@@ -12,6 +12,7 @@
 
 
 {% block content %}
+
 
 <div class="row">
     {% if is_copied %}
@@ -226,6 +227,30 @@
             {% endif %}
         </div>
 
+        <div class="details-block" id="service-maintenance">
+            <h2>Maintenance</h2>
+            {% with until=check.maintenance_until %}
+            {% if until %}<p class="alert alert-info">Notifications suppressed until {{ until|date:"M j, H:i T" }}.</p>{% endif %}
+            {% endwith %}
+            {% for window in check.maintenance_schedules %}
+            <div class="maintenance-window">
+                <div>
+                    <strong>{{ window.name }}</strong>
+                    {% if window.all_projects %}<span class="label label-default">All projects</span>{% elif window.all_checks %}<span class="label label-default">Project-wide</span>{% endif %}
+                    {% include "front/maintenance_schedule.html" %}
+                </div>
+                <div class="maintenance-actions">
+                    {% if not window.enabled %}<span class="label label-default">Disabled</span>{% elif window.active_until %}<span class="label label-warning">Active</span>{% endif %}
+                    {% if rw %}{% if window.project_id or request.user.is_superuser %}<button type="button" class="btn btn-xs btn-default" data-maintenance-url="{% url 'hc-maintenance' check.project.code %}?modal=1&amp;edit={{ window.code }}&amp;return_check={{ check.code }}">Edit&hellip;</button>{% endif %}{% endif %}
+                </div>
+            </div>
+            {% empty %}<p class="text-muted">No maintenance windows configured for this service.</p>{% endfor %}
+            <div class="text-right">
+                <a class="pull-left" href="{% url 'hc-maintenance' check.project.code %}"><small>Project maintenance</small></a>
+                {% if rw %}<button type="button" class="btn btn-sm btn-default" data-maintenance-url="{% url 'hc-maintenance' check.project.code %}?modal=1&amp;check={{ check.code }}&amp;return_check={{ check.code }}">Add Maintenance&hellip;</button>{% endif %}
+            </div>
+        </div>
+
         <div class="details-block">
             {% if group_channels %}
             <h2>Notification Groups</h2>
@@ -349,6 +374,7 @@
 {% include "front/clear_events_modal.html" %}
 {% include "front/filtering_rules_modal.html" %}
 {% include "front/copy_modal.html" %}
+<div id="maintenance-modal" class="modal"></div>
 
 {% if rw and project.show_slugs and not project.ping_key %}
 <div id="no-ping-key-modal" class="modal">
@@ -389,6 +415,7 @@
 <script src="{% static 'js/adaptive-setinterval.js' %}"></script>
 <script src="{% static 'js/ping_details.js' %}"></script>
 <script src="{% static 'js/details.js' %}"></script>
+<script src="{% static 'js/maintenance.js' %}"></script>
 <script src="{% static 'js/slug-suggestions.js' %}"></script>
 {% endcompress %}
 {% endblock %}
