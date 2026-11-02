@@ -1,0 +1,49 @@
+name: Publish fork prerelease
+
+on:
+    push:
+        tags:
+            - "v*-osa.*"
+
+permissions: {}
+
+concurrency:
+    group: fork-release-${{ github.ref }}
+    cancel-in-progress: false
+
+jobs:
+    release:
+        if: github.repository == 'jklinger-osa/healthchecks'
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+            - name: Publish source prerelease
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  GH_REPO: ${{ github.repository }}
+                  RELEASE_TAG: ${{ github.ref_name }}
+              run: |
+                  python3 - <<'PY'
+                  import os
+                  from pathlib import Path
+
+                  tag = os.environ["RELEASE_TAG"]
+                  lines = Path("CHANGELOG.md").read_text().splitlines()
+                  start = next(index for index, line in enumerate(lines) if line.startswith(f"## {tag} - "))
+                  end = next((index for index in range(start + 1, len(lines)) if lines[index].startswith("## ")), len(lines))
+                  notes = "\n".join(lines[start + 1:end]).strip()
+                  if not notes:
+                      raise SystemExit("Release notes must not be empty")
+                  repo = os.environ["GH_REPO"]
+                  notes = notes.replace("(UPGRADING-FROM-4.4.md)", f"(https://github.com/{repo}/blob/{tag}/UPGRADING-FROM-4.4.md)")
+                  Path("release-notes.md").write_text(notes + "\n")
+                  PY
+                  if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+                      echo "Release already exists: $RELEASE_TAG"
+                      exit 0
+                  fi
+                  gh release create "$RELEASE_TAG" --verify-tag --title "Healthchecks $RELEASE_TAG" --notes-file release-notes.md --prerelease --latest=false

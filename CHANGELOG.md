@@ -1,6 +1,33 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## v5.1.0-osa.1 - 2026-11-02
+
+First source-only prerelease of the osapiens fork, based on upstream
+`930f239c` (`v5.1-dev`).
+
+### Added
+
+- One-time and recurring maintenance windows for individual services or entire projects.
+- Superuser-only one-time maintenance across all projects for Healthchecks server updates.
+- Durable alert deferral and reminder suppression during maintenance, with notifications after maintenance if a service remains down.
+- Maintenance dialogs, service details, Active badges, and live status icons.
+- Multi-project invitations with one email; existing membership roles remain unchanged.
+- User-to-project membership management in Django Admin, with ownership shown separately.
+- Checks API status filtering and response field selection in API v1, v2, and v3.
+
+### Upgrade
+
+- Includes database migrations `api.0124`, `api.0125`, and `api.0126`.
+- See [Upgrading from 4.4](UPGRADING-FROM-4.4.md) for deployment instructions and upstream v5.0 Docker changes.
+- Database upgrade rehearsed from the v4.4 schema on synthetic SQLite data; rehearse against a production database copy before deployment.
+- Validated with 1,119 API, frontend, and account tests and strict type checks across 660 source files.
+
+### Release packaging
+
+- Publishes a fork-specific GitHub prerelease and source archives for `v*-osa.*` tags.
+- Automatic upstream Docker Hub publishing is disabled in this fork. No Docker image is included in this release.
+
 ## v5.1-dev - Unreleased
 
 ### Bug Fixes

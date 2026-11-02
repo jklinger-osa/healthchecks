@@ -1,14 +1,13 @@
 name: Publish Docker image
 
 on:
-    release:
-        types: [published]
     workflow_dispatch:
 
 permissions: {}
 
 jobs:
     push_to_registry:
+        if: github.repository == 'healthchecks/healthchecks'
         name: Push Docker image to Docker Hub
         runs-on: ubuntu-latest
         steps:

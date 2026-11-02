@@ -1,6 +1,6 @@
 # Upgrading from Healthchecks 4.4
 
-This fork's `feature/maintenance-windows` branch is based on upstream
+This fork's `v5.1.0-osa.1` prerelease is based on upstream
 `930f239c` (`v5.1-dev`), rather than on the `v4.4` tag. It includes the intervening
 upstream changes as well as the local extensions described in the README.
 
@@ -19,7 +19,7 @@ selection reuse existing tables and do not require additional schema changes.
 Existing checks have no maintenance windows and retain their normal behavior.
 
 The upstream migration directories are unchanged between `v4.4` and this
-branch's base. A database already fully migrated on 4.4 therefore needs only
+release's base. A database already fully migrated on 4.4 therefore needs only
 the three migrations above. Django determines and applies the dependency order;
 do not create tables manually or use `--fake` for this upgrade.
 
@@ -45,7 +45,7 @@ production PostgreSQL or MySQL database.
 
 1. Stop the existing Healthchecks web process and background processes
    (`sendalerts`, `sendreports`, and `smtpd` when used).
-2. Check out this fork's `feature/maintenance-windows` branch. Keep the existing
+2. Fetch this fork's tags and check out `v5.1.0-osa.1`. Keep the existing
    deployment configuration and database settings, and activate the deployment's
    Python environment.
 3. Install dependencies and inspect/apply migrations:
@@ -76,7 +76,8 @@ Docker image.
 
 ## Docker installations: upstream v5.0 changes
 
-Build an image from this fork using `docker/Dockerfile`; the upstream image does
+This release publishes source archives only. Build an image from this fork using
+`docker/Dockerfile`; the upstream image does
 not include these extensions. The image runs migrations on startup through
 `/opt/healthchecks/run.sh`. Start a single instance for the migration, then bring
 up the remaining instances after it succeeds.

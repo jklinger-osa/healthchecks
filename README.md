@@ -606,6 +606,11 @@ The Docker images:
   termination.
 
 
+The first fork prerelease is **v5.1.0-osa.1** (source archives only). Deploy the
+version tag rather than a moving branch. Fork tags matching `v*-osa.*` publish
+GitHub prereleases with notes from [CHANGELOG.md](CHANGELOG.md); the inherited Docker Hub
+publisher runs only in the upstream repository and no longer runs on release.
+
 For migration from Healthchecks 4.4, see [UPGRADING-FROM-4.4.md](UPGRADING-FROM-4.4.md).
 
 ## Scheduled maintenance windows (local extension)
