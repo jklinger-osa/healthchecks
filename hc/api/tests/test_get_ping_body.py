@@ -35,12 +35,12 @@ class GetPingBodyTestCase(BaseTestCase):
         r = self.client.get(self.url)
         self.assertContains(r, "missing api key", status_code=401)
 
-    def test_readonly_key_is_not_allowed(self) -> None:
+    def test_readonly_key_is_allowed(self) -> None:
         self.project.api_key_readonly = "R" * 32
         self.project.save()
 
         r = self.client.get(self.url, HTTP_X_API_KEY="R" * 32)
-        self.assertEqual(r.status_code, 401)
+        self.assertEqual(r.status_code, 200)
 
     def test_it_rejects_post(self) -> None:
         r = self.client.post(self.url, HTTP_X_API_KEY=self.project.api_key)

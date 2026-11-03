@@ -1,6 +1,6 @@
 # Upgrading from Healthchecks 4.4
 
-This fork's `v5.1.0-osa.1` prerelease is based on upstream
+This fork's `v5.1.0-osa.2` prerelease is based on upstream
 `930f239c` (`v5.1-dev`), rather than on the `v4.4` tag. It includes the intervening
 upstream changes as well as the local extensions described in the README.
 
@@ -45,7 +45,7 @@ production PostgreSQL or MySQL database.
 
 1. Stop the existing Healthchecks web process and background processes
    (`sendalerts`, `sendreports`, and `smtpd` when used).
-2. Fetch this fork's tags and check out `v5.1.0-osa.1`. Keep the existing
+2. Fetch this fork's tags and check out `v5.1.0-osa.2`. Keep the existing
    deployment configuration and database settings, and activate the deployment's
    Python environment.
 3. Install dependencies and inspect/apply migrations:
@@ -103,3 +103,13 @@ configuration, and database backup together. The older application does not
 honor the new maintenance windows or deferred-notification state. Restoring a
 backup also discards writes made after that backup, so verify the procedure on
 the rehearsal copy first.
+
+
+## Upgrading from v5.1.0-osa.1 to v5.1.0-osa.2
+
+This patch release adds read-only ping history, ping bodies by `unique_key`, and
+integration listing. It has no new schema changes or dependency changes. Check
+out `v5.1.0-osa.2`, keep the existing production configuration, rebuild static
+assets with the commands above, and restart the web process. Existing read-only
+and read-write keys remain valid. Agents requesting selected check fields must
+include `unique_key` for follow-up diagnostic requests.

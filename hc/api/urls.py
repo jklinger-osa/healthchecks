@@ -58,9 +58,19 @@ api_urls = [
     ),
     path("checks/<uuid:code>/pings/", views.pings, name="hc-api-pings"),
     path(
+        "checks/<sha1:unique_key>/pings/",
+        views.pings_by_unique_key,
+        name="hc-api-pings-by-unique-key",
+    ),
+    path(
         "checks/<uuid:code>/pings/<int:n>/body",
         views.ping_body,
         name="hc-api-ping-body",
+    ),
+    path(
+        "checks/<sha1:unique_key>/pings/<int:n>/body",
+        views.ping_body_by_unique_key,
+        name="hc-api-ping-body-by-unique-key",
     ),
     path("checks/<uuid:code>/flips/", views.flips_by_uuid, name="hc-api-flips"),
     path("checks/<sha1:unique_key>/flips/", views.flips_by_unique_key),

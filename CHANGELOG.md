@@ -1,6 +1,23 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## v5.1.0-osa.2 - 2026-11-03
+
+Source-only prerelease adding read-only agent diagnostics.
+
+### Added
+
+- Recent-ping and ping-body API endpoints now accept read-only keys and the check's `unique_key` in API v1, v2, and v3.
+- Read-only ping responses return `unique_key`-based body links, keeping check UUIDs hidden.
+- Integration listing accepts read-only keys and exposes only ID, name, and type.
+- Existing UUID-based read-write requests, project isolation, ping-history retention, and write restrictions remain unchanged.
+
+### Upgrade
+
+- No new database migration is required when upgrading from `v5.1.0-osa.1`.
+- If upgrading directly from 4.4, apply the existing migrations `api.0124` through `api.0126`; see [Upgrading from 4.4](UPGRADING-FROM-4.4.md).
+- Agents using field selection should include `unique_key` in their requested fields, then use it to list pings and follow `body_url` links with the same read-only key.
+
 ## v5.1.0-osa.1 - 2026-11-02
 
 First source-only prerelease of the osapiens fork, based on upstream

@@ -606,7 +606,7 @@ The Docker images:
   termination.
 
 
-The first fork prerelease is **v5.1.0-osa.1** (source archives only). Deploy the
+The current fork prerelease is **v5.1.0-osa.2** (source archives only). Deploy the
 version tag rather than a moving branch. Fork tags matching `v*-osa.*` publish
 GitHub prereleases with notes from [CHANGELOG.md](CHANGELOG.md); the inherited Docker Hub
 publisher runs only in the upstream repository and no longer runs on release.
@@ -715,3 +715,19 @@ pings until it is back online.
 
 Apply database migrations and restart both the web process and `sendalerts` when
 deploying this extension. No additional worker or scheduler is required.
+
+
+## Read-only agent diagnostics (local extension)
+
+Starting with `v5.1.0-osa.2`, a project-scoped read-only API key can list recent
+pings, retrieve their logged bodies, and list integration metadata. First list
+checks, including `unique_key` if using field selection, for example:
+`GET /api/v3/checks/?fields=name,status,unique_key,last_ping,next_ping`.
+Then call `GET /api/v3/checks/<unique_key>/pings/` and follow the returned
+`body_url` using the same key. These URLs use the read-only identifier and do not
+expose the UUID used for ping ingestion. This also works in API v1 and v2.
+
+`GET /api/v3/channels/` returns only the project's integration IDs, names, and
+types. Existing write permissions and ping-history retention limits are
+unchanged. Upgrading from `v5.1.0-osa.1` requires no new migration; restart the
+web process to load the new endpoints.

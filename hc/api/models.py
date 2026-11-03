@@ -844,7 +844,7 @@ class Ping(models.Model):
     class GetBodyError(Exception):
         pass
 
-    def to_dict(self, owner_code: uuid.UUID, v: int) -> PingDict:
+    def to_dict(self, owner_code: uuid.UUID | str, v: int) -> PingDict:
         if self.has_body():
             # Optimization: construct API URLs manually instead of using reverse().
             # This is significantly quicker when returning hundreds of pings.

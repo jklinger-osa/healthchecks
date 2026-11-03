@@ -58,11 +58,11 @@ in your account.</p>
 </tr>
 <tr>
 <td><a href="#list-pings">List check's logged pings</a></td>
-<td><code>GET SITE_ROOT/api/v2/checks/&lt;uuid&gt;/pings/</code></td>
+<td><code>GET SITE_ROOT/api/v2/checks/&lt;uuid&gt;/pings/</code><br><code>GET SITE_ROOT/api/v2/checks/&lt;unique_key&gt;/pings/</code></td>
 </tr>
 <tr>
 <td><a href="#ping-body">Get a ping's logged body</a></td>
-<td><code>GET SITE_ROOT/api/v2/checks/&lt;uuid&gt;/pings/&lt;n&gt;/body</code></td>
+<td><code>GET SITE_ROOT/api/v2/checks/&lt;uuid&gt;/pings/&lt;n&gt;/body</code><br><code>GET SITE_ROOT/api/v2/checks/&lt;unique_key&gt;/pings/&lt;n&gt;/body</code></td>
 </tr>
 <tr>
 <td><strong>Flips</strong></td>
@@ -118,6 +118,9 @@ and read-only API keys on the <strong>Project Settings</strong> page.</p>
 <ul>
 <li><a href="#list-checks">List existing checks</a></li>
 <li><a href="#get-check">Get a single check</a></li>
+<li><a href="#list-pings">List check's logged pings</a></li>
+<li><a href="#ping-body">Get a ping's logged body</a></li>
+<li><a href="#list-channels">List existing integrations</a></li>
 <li><a href="#list-flips">List check's status changes</a></li>
 <li><a href="#list-badges">List project's badges</a></li>
 </ul>
@@ -1010,8 +1013,14 @@ check that was just deleted.</p>
 </code></pre></div>
 
 <h2 class="rule" id="list-pings">List check's logged pings</h2>
-<p><code>GET SITE_ROOT/api/v2/checks/&lt;uuid&gt;/pings/</code></p>
-<p>Returns a list of pings this check has received.</p>
+<p><code>GET SITE_ROOT/api/v2/checks/&lt;uuid&gt;/pings/</code><br><code>GET SITE_ROOT/api/v2/checks/&lt;unique_key&gt;/pings/</code></p>
+<p>Returns a list of pings this check has received. Accepts read-only and read-write
+API keys. Use the check's <code>unique_key</code> from the checks list when using a read-only
+key; the UUID is not needed. If selecting list fields with <code>fields</code>, include
+<code>unique_key</code> so you can use it for follow-up requests.</p>
+<p>For read-only requests, nonempty <code>body_url</code> values also use <code>unique_key</code> and can be
+followed with the same read-only key. The response does not reveal the check UUID.
+Existing read-write requests continue returning UUID-based body URLs.</p>
 <p>This endpoint returns pings in reverse order (most recent first), and the total
 number of returned pings depends on the account's billing plan: 100 for free accounts,
 1000 for paid accounts.</p>
@@ -1085,7 +1094,9 @@ number of returned pings depends on the account's billing plan: 100 for free acc
 </code></pre></div>
 
 <h2 class="rule" id="ping-body">Get a ping's logged body</h2>
-<p><code>GET SITE_ROOT/api/v2/checks/&lt;uuid&gt;/pings/&lt;n&gt;/body</code></p>
+<p><code>GET SITE_ROOT/api/v2/checks/&lt;uuid&gt;/pings/&lt;n&gt;/body</code><br><code>GET SITE_ROOT/api/v2/checks/&lt;unique_key&gt;/pings/&lt;n&gt;/body</code></p>
+<p>Accepts read-only and read-write API keys and enforces the same retained-history
+limit for both. The identifier must belong to the project authorized by the key.</p>
 <p>Returns a ping's logged body. The response always has the <code>Content-Type: text/plain</code>
 response header and the ping body is returned verbatim in the response body.</p>
 <h3>Response Codes</h3>
@@ -1165,7 +1176,9 @@ response header and the ping body is returned verbatim in the response body.</p>
 
 <h2 class="rule" id="list-channels">List Existing Integrations</h2>
 <p><code>GET SITE_ROOT/api/v2/channels/</code></p>
-<p>Returns a list of integrations belonging to the project.</p>
+<p>Returns a list of integrations belonging to the project. Accepts read-only and
+read-write API keys. Each integration exposes only <code>id</code>, <code>name</code>, and <code>kind</code>;
+credentials, raw configuration, and other projects' integrations are omitted.</p>
 <h3>Response Codes</h3>
 <dl>
 <dt>200 OK</dt>

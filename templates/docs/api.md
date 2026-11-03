@@ -25,8 +25,8 @@ Endpoint Name                                         | Endpoint Address
 [Resume monitoring of a check](#resume-check)         | `POST SITE_ROOT/api/v3/checks/<uuid>/resume`
 [Delete check](#delete-check)                         | `DELETE SITE_ROOT/api/v3/checks/<uuid>`
 **Pings**                                             |
-[List check's logged pings](#list-pings)              | `GET SITE_ROOT/api/v3/checks/<uuid>/pings/`
-[Get a ping's logged body](#ping-body)                | `GET SITE_ROOT/api/v3/checks/<uuid>/pings/<n>/body`
+[List check's logged pings](#list-pings)              | `GET SITE_ROOT/api/v3/checks/<uuid>/pings/`<br>`GET SITE_ROOT/api/v3/checks/<unique_key>/pings/`
+[Get a ping's logged body](#ping-body)                | `GET SITE_ROOT/api/v3/checks/<uuid>/pings/<n>/body`<br>`GET SITE_ROOT/api/v3/checks/<unique_key>/pings/<n>/body`
 **Flips**                                             |
 [List check's status changes](#list-flips)            | `GET SITE_ROOT/api/v3/checks/<uuid>/flips/`<br>`GET SITE_ROOT/api/v3/checks/<unique_key>/flips/`
 **Integrations**                                      |
@@ -58,6 +58,9 @@ read-only key
 
     * [List existing checks](#list-checks)
     * [Get a single check](#get-check)
+    * [List check's logged pings](#list-pings)
+    * [Get a ping's logged body](#ping-body)
+    * [List existing integrations](#list-channels)
     * [List check's status changes](#list-flips)
     * [List project's badges](#list-badges)
 
@@ -1259,9 +1262,16 @@ curl SITE_ROOT/api/v3/checks/7918b17b-a745-4db1-8575-9d2e07c97f79 \
 
 ## List check's logged pings {: #list-pings .rule }
 
-`GET SITE_ROOT/api/v3/checks/<uuid>/pings/`
+`GET SITE_ROOT/api/v3/checks/<uuid>/pings/`<br>`GET SITE_ROOT/api/v3/checks/<unique_key>/pings/`
 
-Returns a list of pings this check has received.
+Returns a list of pings this check has received. Accepts read-only and read-write
+API keys. Use the check's `unique_key` from the checks list when using a read-only
+key; the UUID is not needed. If selecting list fields with `fields`, include
+`unique_key` so you can use it for follow-up requests.
+
+For read-only requests, nonempty `body_url` values also use `unique_key` and can be
+followed with the same read-only key. The response does not reveal the check UUID.
+Existing read-write requests continue returning UUID-based body URLs.
 
 This endpoint returns pings in reverse order (most recent first), and the total
 number of returned pings depends on the account's billing plan: 100 for free accounts,
@@ -1346,7 +1356,10 @@ curl SITE_ROOT/api/v3/checks/f618072a-7bde-4eee-af63-71a77c5723bc/pings/ \
 
 ## Get a ping's logged body {: #ping-body .rule }
 
-`GET SITE_ROOT/api/v3/checks/<uuid>/pings/<n>/body`
+`GET SITE_ROOT/api/v3/checks/<uuid>/pings/<n>/body`<br>`GET SITE_ROOT/api/v3/checks/<unique_key>/pings/<n>/body`
+
+Accepts read-only and read-write API keys and enforces the same retained-history
+limit for both. The identifier must belong to the project authorized by the key.
 
 Returns a ping's logged body. The response always has the `Content-Type: text/plain`
 response header and the ping body is returned verbatim in the response body.
@@ -1462,7 +1475,9 @@ curl SITE_ROOT/api/v3/checks/f618072a-7bde-4eee-af63-71a77c5723bc/flips/ \
 
 `GET SITE_ROOT/api/v3/channels/`
 
-Returns a list of integrations belonging to the project.
+Returns a list of integrations belonging to the project. Accepts read-only and
+read-write API keys. Each integration exposes only `id`, `name`, and `kind`;
+credentials, raw configuration, and other projects' integrations are omitted.
 
 ### Response Codes
 

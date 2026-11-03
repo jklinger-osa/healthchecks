@@ -532,9 +532,9 @@ def checks(request: HttpRequest) -> HttpResponse:
 
 @cors("GET")
 @csrf_exempt
-@authorize
+@authorize_read
 def channels(request: ApiRequest) -> JsonResponse:
-    q = Channel.objects.filter(project=request.project)
+    q = Channel.objects.filter(project=request.project).only("code", "name", "kind")
     channels = [ch.to_dict() for ch in q]
     return JsonResponse({"channels": channels})
 
@@ -652,11 +652,14 @@ def resume(request: ApiRequest, code: UUID) -> HttpResponse:
     return JsonResponse(check.to_dict(v=request.v))
 
 
-@cors("GET")
-@csrf_exempt
-@authorize
-def pings(request: ApiRequest, code: UUID) -> HttpResponse:
-    check = get_object_or_404(Check, code=code)
+def _get_check_by_unique_key(project: Project, unique_key: str) -> Check:
+    for candidate in project.check_set.only("code").iterator():
+        if candidate.unique_key == unique_key:
+            return get_object_or_404(Check, project=project, pk=candidate.pk)
+    raise Http404
+
+
+def _pings_for_check(request: ApiRequest, check: Check) -> HttpResponse:
     if check.project_id != request.project.id:
         return HttpResponseForbidden()
 
@@ -676,17 +679,28 @@ def pings(request: ApiRequest, code: UUID) -> HttpResponse:
 
     prepare_durations(pings)
 
-    # Pass check's code to Ping.to_dict(), so it does not need to look it up
-    # (which would result in a database query)
-    ping_dicts = [p.to_dict(owner_code=check.code, v=request.v) for p in pings]
+    identifier = check.unique_key if request.readonly else check.code
+    ping_dicts = [p.to_dict(owner_code=identifier, v=request.v) for p in pings]
     return JsonResponse({"pings": ping_dicts})
 
 
 @cors("GET")
 @csrf_exempt
-@authorize
-def ping_body(request: ApiRequest, code: UUID, n: int) -> HttpResponse:
+@authorize_read
+def pings(request: ApiRequest, code: UUID) -> HttpResponse:
     check = get_object_or_404(Check, code=code)
+    return _pings_for_check(request, check)
+
+
+@cors("GET")
+@csrf_exempt
+@authorize_read
+def pings_by_unique_key(request: ApiRequest, unique_key: str) -> HttpResponse:
+    check = _get_check_by_unique_key(request.project, unique_key)
+    return _pings_for_check(request, check)
+
+
+def _ping_body_for_check(request: ApiRequest, check: Check, n: int) -> HttpResponse:
     if check.project_id != request.project.id:
         return HttpResponseForbidden()
 
@@ -706,6 +720,24 @@ def ping_body(request: ApiRequest, code: UUID, n: int) -> HttpResponse:
 
     response = HttpResponse(body, content_type="text/plain")
     return response
+
+
+@cors("GET")
+@csrf_exempt
+@authorize_read
+def ping_body(request: ApiRequest, code: UUID, n: int) -> HttpResponse:
+    check = get_object_or_404(Check, code=code)
+    return _ping_body_for_check(request, check, n)
+
+
+@cors("GET")
+@csrf_exempt
+@authorize_read
+def ping_body_by_unique_key(
+    request: ApiRequest, unique_key: str, n: int
+) -> HttpResponse:
+    check = _get_check_by_unique_key(request.project, unique_key)
+    return _ping_body_for_check(request, check, n)
 
 
 def flips(request: ApiRequest, check: Check) -> HttpResponse:

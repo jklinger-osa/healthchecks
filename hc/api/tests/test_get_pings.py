@@ -55,12 +55,12 @@ class GetPingsTestCase(BaseTestCase):
         # body_raw is null, object_size is null, body_url should be None
         self.assertIsNone(ping["body_url"])
 
-    def test_readonly_key_is_not_allowed(self) -> None:
+    def test_readonly_key_is_allowed(self) -> None:
         self.project.api_key_readonly = "R" * 32
         self.project.save()
 
         r = self.get(api_key=self.project.api_key_readonly)
-        self.assertEqual(r.status_code, 401)
+        self.assertEqual(r.status_code, 200)
 
     def test_it_rejects_post(self) -> None:
         r = self.csrf_client.post(self.url, HTTP_X_API_KEY="X" * 32)
