@@ -1,6 +1,12 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Tests
+
+- Make check field-selection assertions independent of database row order, fixing the MySQL CI failure without changing API responses.
+
 ## v5.1.0-osa.2 - 2026-11-03
 
 Source-only prerelease adding read-only agent diagnostics.

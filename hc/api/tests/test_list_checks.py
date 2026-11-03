@@ -258,7 +258,7 @@ class ListChecksTestCase(BaseTestCase):
                     for check in full
                 ]
                 self.assertEqual(response.status_code, 200)
-                self.assertEqual(response.json(), {"checks": expected})
+                self.assertCountEqual(response.json()["checks"], expected)
 
     def test_field_selection_cannot_expose_readonly_secrets(self) -> None:
         self.project.api_key_readonly = "R" * 32
@@ -278,8 +278,9 @@ class ListChecksTestCase(BaseTestCase):
             "/api/v3/checks/?fields=name,schedule,tz,last_duration",
             HTTP_X_API_KEY="X" * 32,
         )
-        self.assertEqual(
-            response.json(), {"checks": [{"name": "Alice 1"}, {"name": "Alice 2"}]}
+        self.assertEqual(response.status_code, 200)
+        self.assertCountEqual(
+            response.json()["checks"], [{"name": "Alice 1"}, {"name": "Alice 2"}]
         )
 
     def test_it_rejects_invalid_status_and_fields(self) -> None:
