@@ -18,9 +18,14 @@
             My Projects
         </h1>
 
+        <label class="checkbox-container" id="project-problems-filter">
+            <input type="checkbox" id="only-problem-projects" data-storage-key="hc.projects.only-problems.{{ request.user.pk }}">
+            <span class="checkmark"></span>Only projects with warnings or errors
+        </label>
+        <p id="no-problem-projects" class="text-muted" style="display:none">No projects currently have warnings or errors.</p>
         <div id="project-selector" class="row">
             {% for project in projects %}
-            <div id="{{ project.code }}" class="col-sm-6 col-md-4">
+            <div id="{{ project.code }}" class="col-sm-6 col-md-4 project-card" data-project-code="{{ project.code }}" data-status="{{ project.overall_status }}">
                 <a href="{% url 'hc-checks' project.code %}">
                     <div class="panel project {% if project.id == last_project_id %}selected{% endif %}">
                         <div class="indicators">
@@ -53,12 +58,33 @@
     </div>
 </div>
 
+<section id="problem-services">
+    <h2>Services with warnings or errors</h2>
+    <p class="text-muted">Services currently down or in their grace period, across your projects.</p>
+    <div class="table-responsive">{% include "front/checks_table.html" %}</div>
+    <p id="no-problem-services" class="text-muted" {% if checks %}style="display:none"{% endif %}>No services currently have warnings or errors.</p>
+</section>
+
+{% include "front/update_name_modal.html" %}
+{% include "front/update_timeout_modal.html" with rw=True %}
+{% include "front/ping_details_modal.html" %}
 {% include "accounts/add_project_modal.html" %}
 
 {% endblock %}
 
 {% block scripts %}
+<script id="common-timezones" type="data">{{ common_timezones|join:"," }}</script>
+<script id="all-timezones" type="data">{{ timezones|join:"," }}</script>
 {% compress js %}
+<script src="{% static 'js/tom-select.popular.min.js' %}"></script>
+<script src="{% static 'js/nouislider.min.js' %}"></script>
+<script src="{% static 'js/purify.min.js' %}"></script>
+<script src="{% static 'js/initialize-timezone-selects.js' %}"></script>
+<script src="{% static 'js/update-timeout-modal.js' %}"></script>
+<script src="{% static 'js/dates.js' %}"></script>
+<script src="{% static 'js/ping_details.js' %}"></script>
+<script src="{% static 'js/checks.js' %}"></script>
+<script src="{% static 'js/slug-suggestions.js' %}"></script>
 <script src="{% static 'js/adaptive-setinterval.js' %}"></script>
 <script src="{% static 'js/add_project_modal.js' %}"></script>
 <script src="{% static 'js/projects.js' %}"></script>

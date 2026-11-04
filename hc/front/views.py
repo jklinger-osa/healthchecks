@@ -20,7 +20,15 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db.models import BinaryField, Case, Count, F, Q, When
+from django.db.models import (
+    BinaryField,
+    Case,
+    Count,
+    F,
+    Q,
+    When,
+    prefetch_related_objects,
+)
 from django.db.models.functions import Substr
 from django.http import (
     Http404,
@@ -55,6 +63,7 @@ from hc.api.models import (
 from hc.front import forms
 from hc.front.templatetags.hc_extras import (
     down_title,
+    natural_name_key,
     num_down_title,
     obfuscated_support_email,
     site_hostname,
@@ -71,6 +80,7 @@ logger = logging.getLogger(__name__)
 VALID_SORT_VALUES = ("name", "-name", "last_ping", "-last_ping", "created")
 STATUS_TEXT_TMPL = get_template("front/log_status_text.html")
 LAST_PING_TMPL = get_template("front/last_ping_cell.html")
+CHECK_ROW_TMPL = get_template("front/check_row.html")
 MAINTENANCE_INDICATOR_TMPL = get_template("front/maintenance_indicator.html")
 EVENTS_TMPL = get_template("front/details_events.html")
 DOWNTIMES_TMPL = get_template("front/details_downtimes.html")
@@ -377,19 +387,17 @@ class ProjectStatus(TypedDict):
     started: bool
 
 
-def _get_project_summary(profile: Profile) -> dict[UUID, ProjectStatus]:
+def _get_project_summary(checks: Iterable[Check]) -> dict[UUID, ProjectStatus]:
     statuses: dict[UUID, ProjectStatus] = defaultdict(
         lambda: {"status": "up", "started": False}
     )
-    q = profile.checks_from_all_projects()
-    q = q.annotate(project_code=F("project__code"))
-    for check in q:
-        summary = statuses[check.project_code]
+    for check in checks:
+        summary = statuses[check.project.code]
         if check.last_start:
             summary["started"] = True
 
         if summary["status"] != "down":
-            status = check.get_status()
+            status = check.cached_status
             if status == "down" or (status == "grace" and summary["status"] == "up"):
                 summary["status"] = status
 
@@ -403,11 +411,87 @@ def index(request: HttpRequest) -> HttpResponse:
     # We now know user is logged, tell the type checker request.profile exists-
     request = cast(AuthenticatedHttpRequest, request)
     _refresh_last_active_date(request)
-    summary = _get_project_summary(request.profile)
-    if "refresh" in request.GET:
+    checks = list(
+        request.profile.checks_from_all_projects().select_related("project__owner")
+    )
+    summary = _get_project_summary(checks)
+    if "refresh" in request.GET and "problems" not in request.GET:
         return JsonResponse({str(k): v for k, v in summary.items()})
 
-    q = request.profile.projects()
+    problem_checks = [
+        check for check in checks if check.cached_status in ("down", "grace")
+    ]
+    problem_checks.sort(
+        key=lambda check: (
+            check.cached_status != "down",
+            natural_name_key(check),
+            check.project.name.lower(),
+            str(check.code),
+        )
+    )
+    prefetch_related_objects(
+        problem_checks,
+        "channel_set",
+        "maintenance_windows",
+        "project__maintenancewindow_set",
+    )
+    MaintenanceWindow.preload_global(problem_checks)
+    channels: dict[int, list[Channel]] = defaultdict(list)
+    project_ids = {check.project_id for check in problem_checks}
+    for channel in (
+        Channel.objects.filter(project_id__in=project_ids)
+        .annotate(is_group=Case(When(kind="group", then=0), default=1))
+        .order_by("is_group", "created")
+    ):
+        channels[channel.project_id].append(channel)
+    roles = dict(
+        Member.objects.filter(
+            user=request.user, project_id__in=project_ids
+        ).values_list("project_id", "role")
+    )
+    slugs: dict[int, Counter[str]] = defaultdict(Counter)
+    for check in checks:
+        if check.slug:
+            slugs[check.project_id][check.slug] += 1
+    problem_rows = [
+        {
+            "check": check,
+            "project": check.project,
+            "channels": channels[check.project_id],
+            "rw": request.user.is_superuser
+            or check.project.owner_id == request.user.pk
+            or roles.get(check.project_id)
+            in (Member.Role.REGULAR, Member.Role.MANAGER),
+            "ambiguous": {
+                slug for slug, count in slugs[check.project_id].items() if count > 1
+            },
+        }
+        for check in problem_checks
+    ]
+    if "refresh" in request.GET:
+        for code in request.profile.projects().values_list("code", flat=True):
+            summary.setdefault(code, {"status": "up", "started": False})
+        rows = []
+        for row in problem_rows:
+            check = cast(Check, row["check"])
+            rows.append(
+                {
+                    "code": str(check.code),
+                    "status": check.cached_status,
+                    "started": check.last_start is not None,
+                    "editable": row["rw"],
+                    "html": CHECK_ROW_TMPL.render({**row, "dashboard": True}),
+                    "last_ping": LAST_PING_TMPL.render({"check": check}).strip(),
+                    "maintenance": MAINTENANCE_INDICATOR_TMPL.render(
+                        {"check": check}
+                    ).strip(),
+                }
+            )
+        return JsonResponse(
+            {"projects": {str(k): v for k, v in summary.items()}, "rows": rows}
+        )
+
+    q = request.profile.projects().select_related("owner")
     q = q.annotate(n_checks=Count("check", distinct=True))
     q = q.annotate(n_channels=Count("channel", distinct=True))
     q = q.annotate(owner_email=F("owner__email"))
@@ -425,6 +509,18 @@ def index(request: HttpRequest) -> HttpResponse:
     projects.sort(key=lambda p: p.overall_status != "down")
     ctx = {
         "page": "projects",
+        "dashboard": True,
+        "checks": problem_checks,
+        "problem_rows": problem_rows,
+        "rw": False,
+        "num_visible": len(problem_checks),
+        "profile_tz": request.profile.tz,
+        "show_last_duration": any(check.clamped_last_duration() for check in checks),
+        "common_timezones": _common_timezones(checks),
+        "timezones": all_timezones,
+        "all_tags": " ".join(
+            sorted({tag for check in checks for tag in check.tags_list()})
+        ),
         "projects": projects,
         "last_project_id": request.session.get("last_project_id"),
         "any_down": any_down,
@@ -583,6 +679,9 @@ def update_name(request: AuthenticatedHttpRequest, code: UUID) -> HttpResponse:
     check.desc = form.cleaned_data["desc"]
     check.save(update_fields=("name", "slug", "tags", "desc"))
 
+    if request.POST.get("return_to") == "projects":
+        return redirect("hc-index")
+
     if "/details/" in request.headers.get("Referer", ""):
         return redirect("hc-details", code)
 
@@ -678,6 +777,9 @@ def update_timeout(request: AuthenticatedHttpRequest, code: UUID) -> HttpRespons
 
     if not check_saved:
         check.save(update_fields=fields)
+
+    if request.POST.get("return_to") == "projects":
+        return redirect("hc-index")
 
     if "/details/" in request.headers.get("Referer", ""):
         return redirect("hc-details", code)

@@ -1,6 +1,6 @@
 # Upgrading from Healthchecks 4.4
 
-This fork's `v5.1.0-osa.2` prerelease is based on upstream
+This fork's `v5.1.0-osa.3` prerelease is based on upstream
 `930f239c` (`v5.1-dev`), rather than on the `v4.4` tag. It includes the intervening
 upstream changes as well as the local extensions described in the README.
 

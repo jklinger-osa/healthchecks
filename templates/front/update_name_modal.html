@@ -6,6 +6,7 @@
             class="form-horizontal"
             method="post">
             {% csrf_token %}
+            {% if dashboard %}<input type="hidden" name="return_to" value="projects">{% endif %}
             <div class="modal-content">
                 <div class="modal-header">
                     <button type="button" class="close" data-dismiss="modal">&times;</button>

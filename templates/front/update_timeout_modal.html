@@ -3,6 +3,7 @@
         <div class="modal-content">
             <form id="update-timeout-form" method="post">
                 {% csrf_token %}
+            {% if dashboard %}<input type="hidden" name="return_to" value="projects">{% endif %}
                 <input type="hidden" name="kind" value="simple" />
                 <input type="hidden" name="timeout" id="update-timeout-timeout" />
                 <input type="hidden" name="grace" id="update-timeout-grace" />
@@ -65,6 +66,7 @@
 
             <form id="update-cron-form" method="post">
                 {% csrf_token %}
+            {% if dashboard %}<input type="hidden" name="return_to" value="projects">{% endif %}
                 <input type="hidden" name="kind" value="cron" />
                 <input type="hidden" name="grace" id="update-cron-grace"/>
                 <div class="modal-body">
@@ -135,6 +137,7 @@
 
             <form id="update-oncalendar-form" method="post">
                 {% csrf_token %}
+            {% if dashboard %}<input type="hidden" name="return_to" value="projects">{% endif %}
                 <input type="hidden" name="kind" value="oncalendar" />
                 <input type="hidden" name="grace" id="update-oncalendar-grace"/>
                 <div class="modal-body">

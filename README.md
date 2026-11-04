@@ -606,7 +606,7 @@ The Docker images:
   termination.
 
 
-The current fork prerelease is **v5.1.0-osa.2** (source archives only). Deploy the
+The current fork prerelease is **v5.1.0-osa.3** (source archives only). Deploy the
 version tag rather than a moving branch. Fork tags matching `v*-osa.*` publish
 GitHub prereleases with notes from [CHANGELOG.md](CHANGELOG.md); the inherited Docker Hub
 publisher runs only in the upstream repository and no longer runs on release.
@@ -731,3 +731,29 @@ expose the UUID used for ping ingestion. This also works in API v1 and v2.
 types. Existing write permissions and ping-history retention limits are
 unchanged. Upgrading from `v5.1.0-osa.1` requires no new migration; restart the
 web process to load the new endpoints.
+
+
+## Main-view problem dashboard (local extension)
+
+The main **My Projects** view has an **Only projects with warnings or errors**
+checkbox. It shows projects containing checks currently **Down** or in **Grace**,
+and remembers the preference per user in the current browser's local storage.
+The filter continues to work for the current page if browser storage is disabled.
+
+The main page keeps its original centered width. The service table scrolls
+horizontally when needed. Service names receive more space than project names;
+ping URL sizing targets its own column so it does not widen the Project column.
+
+Below the project cards, **Services with warnings or errors** lists the affected
+checks across projects you own or belong to. Errors appear before warnings, with
+service names and project links alongside the usual check controls: names/tags,
+integration toggles, period/grace editing, recent ping details, pause, and service
+details. Each row follows that project's permissions; read-only membership does
+not grant editing or pause controls. Saving a name or schedule from this view
+returns to the main page.
+
+The existing adaptive refresh keeps project statuses, the filter, and this table
+current. Newly failing checks appear and recovered/paused checks disappear.
+Maintenance continues to display its normal wrench indicator without changing a
+check's status. No database migration is required. Rebuild collected/compressed
+assets and restart the web process when deploying the dashboard changes.
