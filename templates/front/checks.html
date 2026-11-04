@@ -200,27 +200,7 @@
 {% include "front/update_timeout_modal.html" %}
 {% include "front/add_check_modal.html" %}
 
-<div id="ping-details-modal" class="modal">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div id="ping-details-body">Loading</div>
-            <div class="modal-footer">
-                <a
-                    id="ping-details-log"
-                    href="#"
-                    class="btn btn-default">
-                    Show Earlier Events
-                </a>
-                <button
-                    type="button"
-                    class="btn btn-default"
-                    data-dismiss="modal">
-                    Got It!
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
+{% include "front/ping_details_modal.html" %}
 
 {% endblock %}
 

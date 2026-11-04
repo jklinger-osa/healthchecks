@@ -10,7 +10,7 @@ $(function () {
     var graceOncalendarUnit = document.getElementById("update-timeout-grace-oncalendar-unit");
 
 
-    $(".rw .timeout-grace").click(function() {
+    $(document).on("click", ".rw .timeout-grace", function() {
         var code = $(this).closest("tr.checks-row").attr("id");
         if (!code) {
             code = this.dataset.code;

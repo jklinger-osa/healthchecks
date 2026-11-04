@@ -46,9 +46,9 @@
     padding: 6px;
 }
 
-#checks-table.rw tr:hover .my-checks-name,
-#checks-table.rw tr:hover .integrations,
-#checks-table.rw tr:hover .timeout-grace,
+#checks-table tr.rw:hover .my-checks-name,
+#checks-table tr.rw:hover .integrations,
+#checks-table tr.rw:hover .timeout-grace,
 #checks-table tr:hover .last-ping {
     border: 1px dotted #AAA;
     cursor: pointer;
@@ -104,7 +104,7 @@ body.dark #checks-table .integrations span.off {
 }
 
 /* URL cell  */
-#checks-table td:nth-child(3) {
+#checks-table td.check-ping-url {
     min-width: 420px;
     max-width: 500px;
 }

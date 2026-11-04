@@ -3,9 +3,24 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## v5.1.0-osa.3 - 2026-11-04
+
+Source-only prerelease adding the main-view problem dashboard.
+
+### Added
+
+- Remembered main-view project filter for warnings/errors and a live cross-project problem-service table with existing controls and per-project permissions.
+
 ### Tests
 
 - Make check field-selection assertions independent of database row order, fixing the MySQL CI failure without changing API responses.
+
+### Upgrade
+
+- No new database migration is required when upgrading from `v5.1.0-osa.2`.
+- Rebuild static assets with `collectstatic` and `compress`, then restart the web process.
+- The main page retains its centered layout, with a narrower Project column and more space for service names.
+- For upgrades from 4.4, follow [Upgrading from 4.4](UPGRADING-FROM-4.4.md).
 
 ## v5.1.0-osa.2 - 2026-11-03
 

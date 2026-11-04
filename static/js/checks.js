@@ -2,7 +2,7 @@ $(function () {
     var base = document.getElementById("base-url").getAttribute("href").slice(0, -1);
     var favicon = document.querySelector('link[rel="icon"]');
 
-    $(".rw .my-checks-name").click(function () {
+    $(document).on("click", ".rw .my-checks-name", function () {
         var code = $(this).closest("tr.checks-row").attr("id");
         var url = base + "/checks/" + code + "/name/";
 
@@ -20,22 +20,12 @@ $(function () {
         return false;
     });
 
-    $(".integrations").tooltip({
-        container: "body",
-        selector: "span",
-        title: function () {
-            var idx = $(this).index();
-            return $("#ch-" + idx).data("title");
-        },
-    });
-
-    $(".rw .integrations").on("click", "span", function () {
+    $(document).on("click", ".rw .integrations span", function () {
         var isOff = $(this).toggleClass("off").hasClass("off");
         var token = $("input[name=csrfmiddlewaretoken]").val();
 
-        var idx = $(this).index();
         var checkCode = $(this).closest("tr.checks-row").attr("id");
-        var channelCode = $("#ch-" + idx).data("code");
+        var channelCode = this.dataset.code;
 
         var url =
             base + "/checks/" + checkCode + "/channels/" + channelCode + "/enabled";
@@ -50,7 +40,7 @@ $(function () {
         return false;
     });
 
-    $(".last-ping").on("click", function () {
+    $(document).on("click", ".last-ping", function () {
         if (this.innerText == "Never") {
             return false;
         }
@@ -66,19 +56,6 @@ $(function () {
 
     var profileTz = $("#checks-table").data("profile-tz");
     var dateFormatter = new DateFormatter(profileTz);
-    $(".last-ping").tooltip({
-        delay: 200,
-        title: function () {
-            if (this.querySelector(".label-confirmation")) {
-                return 'The word "confirm" was found in request body';
-            }
-            var dtSpan = this.querySelector("[data-dt]");
-            if (dtSpan) {
-                var dt = new Date(dtSpan.dataset.dt * 1000);
-                return dateFormatter.formatTimestamp(dt);
-            }
-        },
-    });
 
     $("#my-checks-tags .btn").tooltip({
         title: function () {
@@ -205,21 +182,7 @@ $(function () {
     $("#to-uuid").click((e) => switchUrlFormat("uuid"));
     $("#to-slug").click((e) => switchUrlFormat("slug"));
 
-    $(".pause").tooltip({
-        title: function() {
-            var code = $(this).closest("tr.checks-row").attr("id");
-            var alreadyPaused = $("#" + code + " span.status").hasClass("ic-paused");
-            if (alreadyPaused) {
-                return "This check is already paused.";
-            }
-
-            return "Pause this check?<br />Click again to confirm.";
-        },
-        trigger: "manual",
-        html: true,
-    });
-
-    $(".pause").click(function () {
+    $(document).on("click", ".pause", function () {
         var btn = $(this);
         var code = btn.closest("tr.checks-row").attr("id");
 
@@ -251,26 +214,8 @@ $(function () {
         return false;
     });
 
-    $(".pause").mouseleave(function () {
+    $(document).on("mouseleave", ".pause", function () {
         $(this).removeClass("confirm").tooltip("hide");
-    });
-
-    $('[data-toggle="tooltip"]').tooltip({
-        html: true,
-        container: "body",
-        title: function () {
-            var cssClasses = this.getAttribute("class");
-            if (cssClasses.indexOf("ic-new") > -1)
-                return "New. Has never received a ping.";
-            if (cssClasses.indexOf("ic-paused") > -1)
-                return "Monitoring paused.<br />Ping to resume.";
-
-            if (cssClasses.indexOf("sort-name") > -1)
-                return "Sort by name<br />(but failed always first)";
-
-            if (cssClasses.indexOf("sort-last-ping") > -1)
-                return "Sort by last ping<br />(but failed always first)";
-        },
     });
 
     // Schedule refresh to run every 3s when tab is visible and user
@@ -359,14 +304,15 @@ $(function () {
         hideSelected: true,
         highlight: false,
         labelField: "value",
-        options: $("#my-checks-tags div").map(divToOption).get(),
+        options: $("#my-checks-tags div").length
+            ? $("#my-checks-tags div").map(divToOption).get()
+            : ($("#update-tags-input").data("all-tags") || "").split(" ").filter(Boolean).map(value => ({value: value})),
         refreshThrottle: 0,
         render: {no_results: (data, escape) => ""},
         searchField: ["value"],
     });
 
-    $(".my-checks-url").tooltip({ container: "body", title: "Click to copy" });
-    $(".my-checks-url").click(function (e) {
+    $(document).on("click", ".my-checks-url", function (e) {
         if (window.getSelection().toString()) {
             // do nothing, selection not empty
             return;
@@ -388,4 +334,61 @@ $(function () {
         $(this).hide();
         applyFilters();
     });
+    function initializeCheckTooltips(root) {
+        var container = $(root);
+        container.find(".integrations").tooltip({
+            container: "body",
+            selector: "span",
+            title: function () {
+                return this.dataset.title;
+            },
+        });
+        container.find(".last-ping").tooltip({
+            delay: 200,
+            title: function () {
+                if (this.querySelector(".label-confirmation")) {
+                    return 'The word "confirm" was found in request body';
+                }
+                var dtSpan = this.querySelector("[data-dt]");
+                if (dtSpan) {
+                    var dt = new Date(dtSpan.dataset.dt * 1000);
+                    return dateFormatter.formatTimestamp(dt);
+                }
+            },
+        });
+        container.find(".pause").tooltip({
+            title: function() {
+                var code = $(this).closest("tr.checks-row").attr("id");
+                var alreadyPaused = $("#" + code + " span.status").hasClass("ic-paused");
+                if (alreadyPaused) {
+                    return "This check is already paused.";
+                }
+
+                return "Pause this check?<br />Click again to confirm.";
+            },
+            trigger: "manual",
+            html: true,
+        });
+        container.find('[data-toggle="tooltip"]').tooltip({
+            html: true,
+            container: "body",
+            title: function () {
+                var cssClasses = this.getAttribute("class");
+                if (cssClasses.indexOf("ic-new") > -1)
+                    return "New. Has never received a ping.";
+                if (cssClasses.indexOf("ic-paused") > -1)
+                    return "Monitoring paused.<br />Ping to resume.";
+
+                if (cssClasses.indexOf("sort-name") > -1)
+                    return "Sort by name<br />(but failed always first)";
+
+                if (cssClasses.indexOf("sort-last-ping") > -1)
+                    return "Sort by last ping<br />(but failed always first)";
+            },
+        });
+        container.find(".my-checks-url").tooltip({ container: "body", title: "Click to copy" });
+    }
+    window.initializeCheckTooltips = initializeCheckTooltips;
+    initializeCheckTooltips(document);
+
 });

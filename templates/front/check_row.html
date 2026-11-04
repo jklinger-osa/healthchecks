@@ -1,0 +1,69 @@
+{% load hc_extras static %}
+    <tr id="{{ check.code }}" class="checks-row{% if rw %} rw{% endif %}" {% if check in hidden_checks %}style="display: none"{% endif %}>
+        <td>
+            <span class="status ic-{{ check.cached_status }}" data-toggle="tooltip"></span>
+            <div class="spinner {% if check.last_start %}started{% endif %}"></div>
+        </td>
+        <td>
+            <div data-name="{{ check.name }}"
+                 data-slug="{{ check.slug }}"
+                 data-tags="{{ check.tags }}"
+                 data-desc="{{ check.desc }}"
+                 class="my-checks-name {% if not check.name %}unnamed{% endif %}">
+                <div>{{ check.name|default:"unnamed"|break_underscore }}</div>
+                {% for tag in check.tags_list %}
+                <span class="label label-tag">{{ tag }}</span>
+                {% endfor %}
+            </div>
+        </td>
+        {% if dashboard %}<td class="check-project"><a href="{% url 'hc-checks' project.code %}">{{ project }}</a></td>{% endif %}
+        <td class="check-ping-url hidden-xs hidden-sm hidden-md">
+            {% if project.show_slugs and not check.slug %}
+                <span class="unavailable">unavailable, slug not set</span>
+            {% else %}
+                <span class="my-checks-url">{{ check.url|format_ping_endpoint }}</span>
+                {% if project.show_slugs and check.slug in ambiguous %}
+                <small class="text-danger">(not unique)</small>
+                {% endif %}
+            {% endif %}
+        </td>
+        <td class="hidden-xs">
+            <span class="maintenance-indicator-slot">{% include "front/maintenance_indicator.html" %}</span>
+            {% if channels|length <= 10 %}
+                <div class="integrations ic">
+                {% for channel in channels %}<span data-code="{{ channel.code }}" data-title="{{ channel }}"{% if channel not in check.channel_set.all %} class="off"{% endif %}>{{ channel.kind }}</span>{% endfor %}
+                </div>
+            {% else %}
+                {{ check.channel_set.all|length }} of {{ channels|length }}
+            {% endif %}
+        </td>
+        <td class="hidden-xs">
+            <div class="timeout-grace"
+                data-kind="{{ check.kind }}"
+                data-timeout="{{ check.timeout.total_seconds|floatformat:'0' }}"
+                data-grace="{{ check.grace.total_seconds|floatformat:'0' }}"
+                data-schedule="{{ check.schedule }}"
+                data-tz="{{ check.tz }}">
+                {% if check.kind == "simple" %}
+                    {{ check.timeout|hc_duration }}
+                    <br />
+                {% elif check.kind == "cron" or check.kind == "oncalendar" %}
+                    <div class="cron-expression">{{ check.schedule }}</div>
+                {% endif %}
+                <span class="checks-subline">
+                {{ check.grace|hc_duration }}
+                </span>
+            </div>
+        </td>
+        <td class="hidden-xs">
+            <div class="last-ping">{% include "front/last_ping_cell.html" with check=check %}</div>
+        </td>
+        <td class="actions">
+            {% if rw %}
+            <button class="btn pause" type="button">
+                <span class="ic-paused"></span>
+            </button>
+            {% endif %}
+            <a href="{% url 'hc-details' check.code %}" class="btn" title="Show Details"><span class="ic-dots"></span></a>
+        </td>
+    </tr>
