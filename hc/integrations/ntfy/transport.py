@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from textwrap import indent
+
 from django.conf import settings
 
 from hc.api.models import Flip, Notification
-from hc.api.transports import HttpTransport, TransportError
+from hc.api.transports import HttpTransport, TransportError, get_ping_body
 
 
 class Ntfy(HttpTransport):
@@ -22,11 +24,24 @@ class Ntfy(HttpTransport):
         if not TokenBucket.authorize_ntfy(ntfy.url, ntfy.topic):
             raise TransportError("Rate limit exceeded")
 
+        ping = self.last_ping(flip)
+        body = None
+        if (
+            flip.new_status == "down"
+            and flip.reason == "fail"
+            and ping is not None
+            and ping.kind == "fail"
+        ):
+            body = get_ping_body(ping, maxlen=1000)
+            if body:
+                body = indent(body, "    ")
+
         ctx = {
             "flip": flip,
             "check": flip.owner,
             "status": flip.new_status,
-            "ping": self.last_ping(flip),
+            "ping": ping,
+            "body": body,
             "down_checks": self.down_checks(flip.owner),
         }
         payload = {
