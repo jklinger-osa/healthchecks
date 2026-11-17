@@ -606,7 +606,7 @@ The Docker images:
   termination.
 
 
-The current fork prerelease is **v5.1.0-osa.3** (source archives only). Deploy the
+The current fork prerelease is **v5.1.0-osa.4** (source archives only). Deploy the
 version tag rather than a moving branch. Fork tags matching `v*-osa.*` publish
 GitHub prereleases with notes from [CHANGELOG.md](CHANGELOG.md); the inherited Docker Hub
 publisher runs only in the upstream repository and no longer runs on release.
@@ -757,3 +757,18 @@ current. Newly failing checks appear and recovered/paused checks disappear.
 Maintenance continues to display its normal wrench indicator without changing a
 check's status. No database migration is required. Rebuild collected/compressed
 assets and restart the web process when deploying the dashboard changes.
+
+
+## ntfy failure details (local extension)
+
+When an explicit failure ping triggers a DOWN notification, ntfy includes the
+stored request body under **Failure Ping Body**, formatted as a literal code
+block. The first 1,000 characters are included, followed by `[truncated]` when
+needed. This also covers failure pings carrying a nonzero exit status. Empty,
+expired, or unavailable bodies are omitted without preventing the notification.
+Timeout and recovery notifications never include a previous ping's body.
+
+The ntfy integration must use the server root URL, with the topic configured
+separately. No database migration is required; restart the notification worker
+(`sendalerts`) after deploying this change. Failure details will be visible to
+subscribers of the configured ntfy topic.

@@ -3,6 +3,20 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## v5.1.0-osa.4 - 2026-11-17
+
+Source-only prerelease adding explicit failure details to ntfy notifications.
+
+### Added
+
+- ntfy notifications include up to 1,000 characters of the failure ping body as literal code. Timeout and recovery notifications omit ping bodies; unavailable bodies do not prevent alerts.
+
+### Upgrade
+
+- No database migration is required when upgrading from `v5.1.0-osa.3`.
+- Restart the `sendalerts` worker after deployment to load the updated notification code and template.
+- Failure ping bodies are included only for explicit failure alerts, including nonzero exit-status pings. Subscribers of the configured ntfy topic can read these details.
+
 ## v5.1.0-osa.3 - 2026-11-04
 
 Source-only prerelease adding the main-view problem dashboard.

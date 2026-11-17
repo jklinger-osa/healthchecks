@@ -83,6 +83,117 @@ class NotifyNtfyTestCase(BaseTestCase):
         self.assertIn("Reason: received a failure signal.", payload["message"])
 
     @patch("hc.api.transports.curl.request", autospec=True)
+    def test_it_includes_failure_ping_body_as_literal_code(
+        self, mock_post: Mock
+    ) -> None:
+        mock_post.return_value.status_code = 200
+        self.flip.reason = "fail"
+        self.ping.kind = "fail"
+        self.ping.exitstatus = 1
+        self.ping.body_raw = (
+            "Database unavailable\n```\n<script> & **error**\nGrüße".encode()
+        )
+        self.ping.save()
+
+        self.channel.notify(self.flip)
+
+        message = mock_post.call_args.kwargs["json"]["message"]
+        self.assertIn("**Failure Ping Body:**\n\n    Database unavailable", message)
+        self.assertIn("\n    ```\n    <script> & **error**\n    Grüße", message)
+        self.assertIn("**Last Ping:** Exit status 1", message)
+
+    @patch("hc.api.transports.curl.request", autospec=True)
+    def test_it_truncates_failure_ping_body(self, mock_post: Mock) -> None:
+        mock_post.return_value.status_code = 200
+        self.flip.reason = "fail"
+        self.ping.kind = "fail"
+        self.ping.body_raw = b"X" * 1000 + b"DO NOT INCLUDE"
+        self.ping.save()
+
+        self.channel.notify(self.flip)
+
+        message = mock_post.call_args.kwargs["json"]["message"]
+        self.assertIn("    " + "X" * 1000 + "\n    [truncated]", message)
+        self.assertNotIn("DO NOT INCLUDE", message)
+
+    @patch("hc.api.transports.curl.request", autospec=True)
+    def test_it_omits_missing_failure_ping_body(self, mock_post: Mock) -> None:
+        mock_post.return_value.status_code = 200
+        self.flip.reason = "fail"
+        self.ping.kind = "fail"
+        self.ping.save()
+
+        self.channel.notify(self.flip)
+
+        self.assertNotIn(
+            "Failure Ping Body", mock_post.call_args.kwargs["json"]["message"]
+        )
+
+    @patch("hc.api.transports.curl.request", autospec=True)
+    def test_it_sends_alert_when_failure_body_cannot_be_loaded(
+        self, mock_post: Mock
+    ) -> None:
+        mock_post.return_value.status_code = 200
+        self.flip.reason = "fail"
+        self.ping.kind = "fail"
+        self.ping.body_raw = b"Unavailable error details"
+        self.ping.save()
+
+        with patch.object(Ping, "get_body_bytes", side_effect=Ping.GetBodyError):
+            self.channel.notify(self.flip)
+
+        self.assertNotIn(
+            "Failure Ping Body", mock_post.call_args.kwargs["json"]["message"]
+        )
+        self.assertEqual(Notification.objects.get().error, "")
+
+    @patch("hc.integrations.ntfy.transport.get_ping_body")
+    @patch("hc.api.transports.curl.request", autospec=True)
+    def test_it_does_not_load_body_for_timeout_or_recovery(
+        self, mock_post: Mock, mock_body: Mock
+    ) -> None:
+        mock_post.return_value.status_code = 200
+        self.ping.kind = "fail"
+        self.ping.body_raw = b"Old failure details"
+        self.ping.save()
+
+        for status, reason in (("down", "timeout"), ("up", "")):
+            with self.subTest(status=status):
+                self.flip.new_status = status
+                self.flip.reason = reason
+                self.channel.notify(self.flip)
+                self.assertNotIn(
+                    "Failure Ping Body", mock_post.call_args.kwargs["json"]["message"]
+                )
+
+        mock_body.assert_not_called()
+
+    @patch("hc.integrations.ntfy.transport.get_ping_body")
+    @patch("hc.api.transports.curl.request", autospec=True)
+    def test_it_does_not_use_unrelated_or_future_ping_body(
+        self, mock_post: Mock, mock_body: Mock
+    ) -> None:
+        mock_post.return_value.status_code = 200
+        self.flip.reason = "fail"
+        self.ping.body_raw = b"Previous success body"
+        self.ping.save()
+        Ping.objects.create(
+            owner=self.check,
+            created=self.flip.created + td(seconds=1),
+            kind="fail",
+            body_raw=b"Future failure body",
+        )
+
+        self.channel.notify(self.flip)
+        self.ping.delete()
+        self.channel.notify(self.flip)
+
+        mock_body.assert_not_called()
+        self.assertNotIn(
+            "Failure Ping Body", mock_post.call_args.kwargs["json"]["message"]
+        )
+
+    @patch("hc.api.transports.curl.request", autospec=True)
     def test_it_reports_down_duration(self, mock_post: Mock) -> None:
         mock_post.return_value.status_code = 200
 
