@@ -3,6 +3,21 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## v5.1.0-osa.5 - 2026-11-20
+
+Source-only prerelease adding failure request bodies to the main-view problem dashboard.
+
+### Added
+
+- An **Error details** column beside the service name shows up to 1,000 characters of the current failure ping's request body as escaped, wrapped text.
+- Error details update and clear during live refresh. Timeout/grace failures and missing or unavailable bodies leave the column empty; older failure bodies are not reused.
+- Failure-body database queries are scoped to accessible checks and use a bounded preview without adding queries per service.
+
+### Upgrade
+
+- No database migration is required when upgrading from `v5.1.0-osa.4`.
+- Run `python manage.py collectstatic --noinput` and `python manage.py compress`, then restart the web process.
+
 ## v5.1.0-osa.4 - 2026-11-17
 
 Source-only prerelease adding explicit failure details to ntfy notifications.

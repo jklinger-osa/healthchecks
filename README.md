@@ -606,7 +606,7 @@ The Docker images:
   termination.
 
 
-The current fork prerelease is **v5.1.0-osa.4** (source archives only). Deploy the
+The current fork prerelease is **v5.1.0-osa.5** (source archives only). Deploy the
 version tag rather than a moving branch. Fork tags matching `v*-osa.*` publish
 GitHub prereleases with notes from [CHANGELOG.md](CHANGELOG.md); the inherited Docker Hub
 publisher runs only in the upstream repository and no longer runs on release.
@@ -751,6 +751,13 @@ integration toggles, period/grace editing, recent ping details, pause, and servi
 details. Each row follows that project's permissions; read-only membership does
 not grant editing or pause controls. Saving a name or schedule from this view
 returns to the main page.
+
+The **Error details** column beside the service name shows the current explicit
+failure ping's request body as escaped, wrapped text, limited to 1,000 characters.
+It updates during live refresh and stays empty for timeout/grace failures, missing
+bodies, or temporarily unavailable object storage. Older failure bodies are never
+shown after a subsequent successful ping. Failure bodies are fetched only for
+checks the current user can access, with a bounded database preview in one query.
 
 The existing adaptive refresh keeps project statuses, the filter, and this table
 current. Newly failing checks appear and recovered/paused checks disappear.

@@ -48,6 +48,7 @@ $(function () {
                 row.find(".status").attr("class", "status ic-" + item.status);
                 row.find(".spinner").toggleClass("started", item.started);
                 row.find(".last-ping").html(item.last_ping);
+                row.find(".check-error-details pre").text(item.error_details);
                 row.find(".maintenance-indicator-slot").html(item.maintenance);
             }
             if (previous.next()[0] !== row[0]) row.insertAfter(previous);

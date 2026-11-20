@@ -23,7 +23,7 @@
             </a>
             {% endif %}
         </th>
-        {% if dashboard %}<th>Project</th>{% endif %}
+        {% if dashboard %}<th>Error details</th><th>Project</th>{% endif %}
         <th class="hidden-xs hidden-sm hidden-md">
             <span class="visible-lg-inline">
                 Ping URL
@@ -65,7 +65,7 @@
     </tr>
     {% if dashboard %}
     {% for row in problem_rows %}
-        {% include "front/check_row.html" with check=row.check project=row.project rw=row.rw channels=row.channels ambiguous=row.ambiguous %}
+        {% include "front/check_row.html" with check=row.check project=row.project error_details=row.error_details rw=row.rw channels=row.channels ambiguous=row.ambiguous %}
     {% endfor %}
     {% else %}
     {% for check in checks %}

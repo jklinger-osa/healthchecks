@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from datetime import timedelta as td
+from unittest.mock import Mock, patch
 
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.utils.timezone import now
 
 from hc.accounts.models import Member, Project
-from hc.api.models import Channel, Check
+from hc.api.models import Channel, Check, Ping
 from hc.test import BaseTestCase
 
 
@@ -44,11 +45,12 @@ class ProblemDashboardTestCase(BaseTestCase):
         self.membership = Member.objects.create(
             user=self.alice, project=self.bobs_project, role="r"
         )
+        self.failure_time = now() - td(hours=2)
         self.down = Check.objects.create(
             project=self.project,
             name="Failed job",
             status="down",
-            last_ping=now() - td(hours=2),
+            last_ping=self.failure_time,
         )
         self.grace = Check.objects.create(
             project=self.bobs_project,
@@ -206,7 +208,120 @@ class ProblemDashboardTestCase(BaseTestCase):
         response = self.client.get("/?refresh=1&problems=1")
         self.assertEqual(response.status_code, 302)
 
+    def test_error_details_are_escaped_and_scoped_to_accessible_checks(self) -> None:
+        body = b'<script>alert("error")</script>\nDatabase unavailable'
+        Ping.objects.create(
+            owner=self.down, created=self.failure_time, kind="fail", body_raw=body
+        )
+        self.private.last_ping = self.down.last_ping
+        self.private.save()
+        Ping.objects.create(
+            owner=self.private,
+            created=self.failure_time,
+            kind="fail",
+            body_raw=b"Private failure body",
+        )
+
+        response = self.client.get("/")
+        self.assertContains(response, "<th>Error details</th>")
+        self.assertContains(
+            response, "&lt;script&gt;alert(&quot;error&quot;)&lt;/script&gt;"
+        )
+        self.assertNotContains(response, '<script>alert("error")</script>')
+        self.assertNotContains(response, "Private failure body")
+        data = self.client.get("/?refresh=1&problems=1").json()
+        row = next(row for row in data["rows"] if row["code"] == str(self.down.code))
+        self.assertEqual(row["error_details"], body.decode())
+        self.assertIn("&lt;script&gt;", row["html"])
+        self.assertNotIn("Private failure body", str(data))
+
+    def test_error_details_follow_new_failures_and_clear_for_timeouts(self) -> None:
+        Ping.objects.create(
+            owner=self.down,
+            created=self.failure_time,
+            kind="fail",
+            body_raw=b"First error",
+        )
+        current_time = self.failure_time + td(seconds=1)
+        self.down.last_ping = current_time
+        self.down.save()
+        Ping.objects.create(
+            owner=self.down,
+            created=current_time,
+            kind="fail",
+            body_raw=b"Current error",
+        )
+        Ping.objects.create(
+            owner=self.down,
+            created=current_time + td(seconds=1),
+            kind="log",
+            body_raw=b"Later log message",
+        )
+        data = self.client.get("/?refresh=1&problems=1").json()
+        row = next(row for row in data["rows"] if row["code"] == str(self.down.code))
+        self.assertEqual(row["error_details"], "Current error")
+
+        self.down.status = "up"
+        self.down.timeout = td(minutes=1)
+        self.down.grace = td(minutes=1)
+        success_time = current_time + td(seconds=2)
+        self.down.last_ping = success_time
+        self.down.save()
+        Ping.objects.create(
+            owner=self.down,
+            created=success_time,
+            body_raw=b"Success body",
+        )
+        data = self.client.get("/?refresh=1&problems=1").json()
+        row = next(row for row in data["rows"] if row["code"] == str(self.down.code))
+        self.assertEqual(row["status"], "down")
+        self.assertEqual(row["error_details"], "")
+        self.assertNotIn("Current error", row["html"])
+
+    def test_error_details_truncate_long_unicode_bodies(self) -> None:
+        body = "\U0001f4a5" * 1001
+        Ping.objects.create(
+            owner=self.down,
+            created=self.failure_time,
+            kind="fail",
+            body_raw=body.encode(),
+        )
+        data = self.client.get("/?refresh=1&problems=1").json()
+        row = next(row for row in data["rows"] if row["code"] == str(self.down.code))
+        self.assertEqual(row["error_details"], body[:1000] + "\n[truncated]")
+
+    @patch("hc.api.models.get_object")
+    def test_error_details_handle_object_storage_and_missing_bodies(
+        self, get_object: Mock
+    ) -> None:
+        Ping.objects.create(
+            owner=self.down,
+            created=self.failure_time,
+            kind="fail",
+            n=1,
+            object_size=100,
+        )
+        for stored_body, expected in (
+            (b"Stored failure", "Stored failure"),
+            (None, ""),
+            (Ping.GetBodyError(), ""),
+        ):
+            with self.subTest(stored_body=stored_body):
+                if isinstance(stored_body, Exception):
+                    get_object.side_effect = stored_body
+                else:
+                    get_object.return_value = stored_body
+                response = self.client.get("/")
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(
+                    response.context["problem_rows"][0]["error_details"], expected
+                )
+        get_object.assert_called_with(str(self.down.code), 1)
+
     def test_database_query_count_does_not_grow_per_service(self) -> None:
+        Ping.objects.create(
+            owner=self.down, created=self.failure_time, kind="fail", body_raw=b"Error"
+        )
         self.client.get("/")
         urls = ("/", "/?refresh=1&problems=1")
         counts = []
@@ -215,8 +330,14 @@ class ProblemDashboardTestCase(BaseTestCase):
                 self.client.get(url)
             counts.append(len(queries))
         for number in range(15):
-            Check.objects.create(
-                project=self.project, name=f"Failure {number}", status="down"
+            check = Check.objects.create(
+                project=self.project,
+                name=f"Failure {number}",
+                status="down",
+                last_ping=self.down.last_ping,
+            )
+            Ping.objects.create(
+                owner=check, created=self.failure_time, kind="fail", body_raw=b"Error"
             )
         for url, count in zip(urls, counts, strict=True):
             with self.subTest(url=url), CaptureQueriesContext(connection) as queries:

@@ -453,10 +453,37 @@ def index(request: HttpRequest) -> HttpResponse:
     for check in checks:
         if check.slug:
             slugs[check.project_id][check.slug] += 1
+    failure_bodies: dict[int, str] = {}
+    failed_checks = [
+        check
+        for check in problem_checks
+        if check.status == "down" and check.last_ping is not None
+    ]
+    pings = (
+        Ping.objects.filter(
+            owner__in=failed_checks, kind="fail", created=F("owner__last_ping")
+        )
+        .select_related("owner")
+        .defer("body_raw")
+        .annotate(
+            body_raw_preview=Substr("body_raw", 1, 4001, output_field=BinaryField())
+        )
+    )
+    for ping in pings:
+        if ping.object_size and ping.n:
+            body = ping.get_body()
+        else:
+            body = bytes(ping.body_raw_preview or b"").decode(errors="replace")
+        if body:
+            if len(body) > 1000:
+                body = body[:1000] + "\n[truncated]"
+            failure_bodies[ping.owner_id] = body
+
     problem_rows = [
         {
             "check": check,
             "project": check.project,
+            "error_details": failure_bodies.get(check.pk, ""),
             "channels": channels[check.project_id],
             "rw": request.user.is_superuser
             or check.project.owner_id == request.user.pk
@@ -480,6 +507,7 @@ def index(request: HttpRequest) -> HttpResponse:
                     "status": check.cached_status,
                     "started": check.last_start is not None,
                     "editable": row["rw"],
+                    "error_details": row["error_details"],
                     "html": CHECK_ROW_TMPL.render({**row, "dashboard": True}),
                     "last_ping": LAST_PING_TMPL.render({"check": check}).strip(),
                     "maintenance": MAINTENANCE_INDICATOR_TMPL.render(

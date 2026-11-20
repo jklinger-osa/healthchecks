@@ -16,7 +16,7 @@
                 {% endfor %}
             </div>
         </td>
-        {% if dashboard %}<td class="check-project"><a href="{% url 'hc-checks' project.code %}">{{ project }}</a></td>{% endif %}
+        {% if dashboard %}<td class="check-error-details"><pre>{{ error_details|default:"" }}</pre></td><td class="check-project"><a href="{% url 'hc-checks' project.code %}">{{ project }}</a></td>{% endif %}
         <td class="check-ping-url hidden-xs hidden-sm hidden-md">
             {% if project.show_slugs and not check.slug %}
                 <span class="unavailable">unavailable, slug not set</span>

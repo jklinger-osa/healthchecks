@@ -80,3 +80,25 @@
     min-width: 260px;
     max-width: 360px;
 }
+
+#problem-services #checks-table .check-error-details {
+    min-width: 220px;
+    max-width: 360px;
+    width: 28%;
+}
+
+#problem-services .check-error-details pre {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--text-color);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-height: 10em;
+    overflow: auto;
+}
+
+#problem-services .check-error-details pre:empty {
+    display: none;
+}
